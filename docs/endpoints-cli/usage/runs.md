@@ -70,6 +70,7 @@ A run flagged `--test` shows as `Test Run │ Yes` in `runs get`. It is **not** 
 ├── system_desc.json                  # §8.2 hardware/software description (required)
 ├── point.yaml                        # §8.3 Pareto-point disclosure (required)
 │                                     #   ^ both authored by the submitter, not by endpoints
+├── system_power.json                 # §4.5.2 power descriptor (Standardized; submitter-authored)
 ├── performance/result_summary.json   # Performance metrics (required)
 ├── accuracy/accuracy_results.json    # Per-dataset accuracy scores
 ├── config.yaml                       # Resolved benchmark configuration (optional as of v1.0)
@@ -80,6 +81,14 @@ A run flagged `--test` shows as `Test Run │ Yes` in `runs get`. It is **not** 
 ├── src/<implementation>/             # Merged into the bundle's shared src/ (README.md required)
 └── documentation/                    # Merged into the bundle's shared docs/
 ```
+
+**What reaches the database.** Besides `system_desc.json`, `config.yaml` and the
+result summary, `runs create` sends `point.yaml` as `point_config`. When the folder has
+a `system_power.json`, it sends that too, as `system_power`, plus a `derived` object
+computed with the submission checker's own power arithmetic: `provisioned_power_kw`,
+`point_power_kw` (scaled by the point's `nodes_used`), `system_tps_per_kw`, and
+`mlc_estimated_power` (true when any value fell back to an Appendix D default).
+`--dry-run` prints the exact payload.
 
 This is the layout `mlcommons/endpoints` writes to its `report_dir` — `performance/`
 exists when the performance phase ran, `accuracy/` when the accuracy phase ran, and

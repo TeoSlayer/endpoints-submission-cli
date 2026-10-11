@@ -10,6 +10,9 @@ Run folder layout, as written by ``mlcommons/endpoints`` to its ``report_dir``
         point.yaml                          — §8.3 Pareto-point disclosure        [required]
                                               Neither is an endpoints artifact: the
                                               submitter authors both and drops them in
+        system_power.json                   — §4.5.2 provisioned-power descriptor [optional]
+                                              also submitter-authored; required for
+                                              Standardized at submission time
         performance/result_summary.json     — performance metrics                 [required]
         config.yaml                         — resolved benchmark configuration    [optional]
         accuracy/accuracy_results.json      — per-dataset accuracy scores
@@ -34,6 +37,9 @@ from pathlib import Path
 from typing import Any, cast
 
 import yaml
+
+from submission_checker.layout import SYSTEM_POWER_JSON
+from submission_checker.power_summary import derive_point_power
 
 from ..exceptions import RunFolderError
 from ..truncation import truncate_responses
@@ -73,7 +79,10 @@ def parse_run_folder(path: Path) -> dict[str, Any]:
               passed through as an empty mapping when absent.
 
     Returns:
-        Dict with keys matching ``RunCreate`` schema fields.
+        Dict with keys matching ``RunCreate`` schema fields. ``point_config`` is
+        ``point.yaml``. ``system_power`` is ``system_power.json`` with a ``derived``
+        object added (see :func:`derive_point_power`), or absent when the folder has
+        no descriptor.
 
     Raises:
         RunFolderError: If any required file is absent or malformed.
@@ -88,18 +97,30 @@ def parse_run_folder(path: Path) -> dict[str, Any]:
     config_path = path / "config.yaml"
     config = _load_yaml(config_path) if config_path.exists() else {}
     result_summary = _load_json(path / _RESULT_SUMMARY_REL)
+    point_config = _load_yaml(path / "point.yaml")
 
     started_at, finished_at = _extract_timestamps(result_summary)
     benchmark_version = result_summary.get("git_sha") or "unknown"
 
-    return {
+    payload: dict[str, Any] = {
         "benchmark_version": benchmark_version,
         "started_at": started_at.isoformat(),
         "finished_at": finished_at.isoformat(),
         "system_info": system_info,
         "config": config,
         "result_summary": result_summary,
+        "point_config": point_config,
     }
+    power_path = path / SYSTEM_POWER_JSON
+    if power_path.exists():
+        system_power = _load_json(power_path)
+        # Computed here so the database and visualizer get the same figures the
+        # checker accepts; the file in the archive stays as the submitter wrote it.
+        payload["system_power"] = {
+            **system_power,
+            "derived": derive_point_power(system_power, point_config, system_info, result_summary),
+        }
+    return payload
 
 
 def _validate_required_files(path: Path) -> None:
