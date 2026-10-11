@@ -69,13 +69,14 @@ def build_submission_folder(
     submission_id: str | None = None,
     shared_src_dirs: Sequence[Path] = (),
     shared_docs_dirs: Sequence[Path] = (),
+    target_availability_date: str | None = None,
 ) -> Path:
     """Assemble a submission directory from a list of run archives.
 
     Args:
         run_archives: List of ``(run_id, archive_path)`` tuples.
         division: Submission division (e.g. ``"standardized"``).
-        availability: Publication/availability status (e.g. ``"available"``).
+        availability: §8.2 ``system_availability_status`` (e.g. ``"available"``).
         work_dir: Base directory in which to build the submission tree.
         submission_id: MLC-assigned submission id, used as the directory level
             beneath the organization. Defaults to :data:`PENDING_SUBMISSION_ID`
@@ -85,6 +86,8 @@ def build_submission_folder(
             ``src/`` tree, so each holds one or more ``<implementation>/`` folders.
         shared_docs_dirs: Local directories whose *contents* are added to the shared
             ``docs/`` tree.
+        target_availability_date: ``YYYY-MM-DD``. When given, written into every
+            ``system_desc.json``, where §8.2 requires it for a Preview system.
 
     Returns:
         Path to the assembled org-level submission directory (the parent of the
@@ -104,7 +107,7 @@ def build_submission_folder(
         for run_id, archive_path in run_archives:
             run_dir = Path(tmp) / run_id
             extract_archive(archive_path, run_dir)
-            data = _load_run_data(run_id, division, availability, run_dir)
+            data = _load_run_data(run_id, division, availability, run_dir, target_availability_date)
             run_data.append(data)
 
     if len(run_data) > 1:
@@ -239,7 +242,13 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _load_run_data(run_id: str, division: str, availability: str, run_dir: Path) -> dict[str, Any]:
+def _load_run_data(
+    run_id: str,
+    division: str,
+    availability: str,
+    run_dir: Path,
+    target_availability_date: str | None = None,
+) -> dict[str, Any]:
     """Find and load required files from an extracted run archive.
 
     Uses point.yaml as the directory anchor. All supplementary files are read
@@ -278,7 +287,7 @@ def _load_run_data(run_id: str, division: str, availability: str, run_dir: Path)
     )
     result_summary: dict[str, Any] = json.loads(summary_path.read_text())
 
-    system_info = _load_system_desc(base, run_id, division, availability)
+    system_info = _load_system_desc(base, run_id, division, availability, target_availability_date)
 
     return {
         "run_id": run_id,
@@ -295,10 +304,17 @@ def _load_run_data(run_id: str, division: str, availability: str, run_dir: Path)
     }
 
 
-def _load_system_desc(base: Path, run_id: str, division: str, availability: str) -> dict[str, Any]:
+def _load_system_desc(
+    base: Path,
+    run_id: str,
+    division: str,
+    availability: str,
+    target_availability_date: str | None = None,
+) -> dict[str, Any]:
     """Load system_desc.json from a run folder and return the validated flat dict.
 
-    Applies the CLI-provided division and availability values, then validates
+    Applies the CLI-provided division, availability and (when given) target
+    availability date, then validates
     against the SystemDescription schema.
 
     Raises:
@@ -308,13 +324,15 @@ def _load_system_desc(base: Path, run_id: str, division: str, availability: str)
     if not sd_path.exists():
         raise SubmissionBuildError(f"Run archive is missing {layout.SYSTEM_DESC_JSON}")
     raw: dict[str, Any] = json.loads(sd_path.read_text())
-    # CLI-provided values are authoritative for these fields. §8.2 renamed availability
-    # to publication_status; the older spellings are dropped rather than left behind,
-    # since SystemDescription rejects two spellings that disagree.
+    # CLI-provided values are authoritative for these fields. §8.2 names availability
+    # system_availability_status; the legacy spellings are dropped rather than left
+    # behind, since SystemDescription rejects two spellings that disagree.
     raw["division"] = division
-    for legacy in ("system_availability_status", "availability_status"):
+    for legacy in ("publication_status", "availability_status"):
         raw.pop(legacy, None)
-    raw["publication_status"] = availability
+    raw["system_availability_status"] = availability
+    if target_availability_date:
+        raw["target_availability_date"] = target_availability_date
     try:
         sd = SystemDescription.model_validate(raw)
     except ValidationError as exc:

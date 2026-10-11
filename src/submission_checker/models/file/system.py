@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+import re
 from enum import Enum
 from typing import Annotated
 
@@ -156,12 +158,20 @@ class ConfigSummary(BaseModel):
 #: ``config_summary`` accepts either the structured object or free-form prose.
 _ConfigSummaryStr = Annotated[str, StringConstraints(min_length=4)]
 
-#: The three spellings the docs use for the availability / publication-status field.
+#: §8.2's availability field first, then the legacy spellings still read from older
+#: bundles: ``publication_status`` (written by earlier builds of this CLI) and
+#: ``availability_status``.
 _AVAILABILITY_SPELLINGS = (
-    "publication_status",
     "system_availability_status",
+    "publication_status",
     "availability_status",
 )
+
+#: §8.2 caps ``shortened_system_name`` at this many characters.
+_SHORTENED_SYSTEM_NAME_MAX = 20
+
+#: An ISO 8601 calendar date, ``YYYY-MM-DD`` — the form §8.2 asks for.
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 class DatasetAccuracyScores(BaseModel):
@@ -201,17 +211,21 @@ class SystemDescription(BaseModel):
     # System metadata
     system_name: str
     system_category: str | None = None
-    #: §8.2's name for availability. §8.2.1's template and v0.7 both call it
-    #: ``system_availability_status``; a third spelling, ``availability_status``,
-    #: appears elsewhere in the docs. All three are accepted — see
-    #: :meth:`_reconcile_availability_spellings`.
-    publication_status: SystemAvailabilityStatus
+    #: §8.2 and its §8.2.1 template both name this ``system_availability_status``. The
+    #: legacy spellings ``publication_status`` and ``availability_status`` are still
+    #: read — see :meth:`_reconcile_availability_spellings`.
+    system_availability_status: SystemAvailabilityStatus
+    #: Required when Available (§8.2, Submission Rules §7.3.7).
+    availability_url: str | None = None
+    #: ISO 8601 date; required when Preview (§8.2, Submission Rules §7.3.4).
+    target_availability_date: str | None = None
     max_supported_concurrency: int
     system_size: str
     system_node_ensemble_count: int
     system_node_ensemble_total: int
     serving_framework: str | None = None
-    shortened_system_name: str | None = None
+    #: At most 20 characters (§8.2).
+    shortened_system_name: str
     endpoint_url: str | None = None
     node_types: list[NodeType]
 
@@ -273,11 +287,11 @@ class SystemDescription(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _reconcile_availability_spellings(cls, data: object) -> object:
-        """Accept all three spellings of the availability field, rejecting disagreement.
+        """Fold the legacy availability spellings into ``system_availability_status``.
 
-        §8.2's table says ``publication_status``, §8.2.1's template and v0.7 say
-        ``system_availability_status``, and ``availability_status`` appears elsewhere in
-        the docs. Guessing which one a submitter meant is only safe when they agree, so
+        §8.2 names the field ``system_availability_status``; earlier builds of this CLI
+        wrote ``publication_status``, and ``availability_status`` appears in older
+        docs. Guessing which one a submitter meant is only safe when they agree, so
         two conflicting values are an error rather than a silent pick.
         """
         if not isinstance(data, dict):
@@ -291,11 +305,11 @@ class SystemDescription(BaseModel):
         if len(distinct) > 1:
             pairs = ", ".join(f"{k}={v!r}" for k, v in sorted(present.items()))
             raise Invalid("system-description-valid", "availability-conflict", values=pairs)
-        if data.get("publication_status") in (None, ""):
-            data = {**data, "publication_status": next(iter(present.values()))}
+        if data.get("system_availability_status") in (None, ""):
+            data = {**data, "system_availability_status": next(iter(present.values()))}
         return data
 
-    @field_validator("publication_status", mode="before")
+    @field_validator("system_availability_status", mode="before")
     @classmethod
     def _coerce_availability(cls, v: object) -> object:
         if isinstance(v, str):
@@ -305,6 +319,54 @@ class SystemDescription(BaseModel):
                 return normalized
             raise Invalid("system-description-valid", "availability-unknown", value=v)
         return v
+
+    @field_validator("shortened_system_name")
+    @classmethod
+    def _check_shortened_system_name(cls, v: str) -> str:
+        if not v.strip():
+            raise Invalid("system-description-valid", "shortened-name-empty")
+        if len(v) > _SHORTENED_SYSTEM_NAME_MAX:
+            raise Invalid(
+                "system-description-valid",
+                "shortened-name-too-long",
+                value=v,
+                length=len(v),
+                limit=_SHORTENED_SYSTEM_NAME_MAX,
+            )
+        return v
+
+    @field_validator("availability_url", "target_availability_date", mode="before")
+    @classmethod
+    def _coerce_blank_to_none(cls, v: object) -> object:
+        # §8.2.1's template ships these as "", which means "not given".
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("target_availability_date")
+    @classmethod
+    def _check_iso_date(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        valid = _ISO_DATE.fullmatch(v) is not None
+        if valid:
+            try:
+                datetime.date.fromisoformat(v)
+            except ValueError:
+                valid = False
+        if not valid:
+            raise Invalid("system-description-valid", "availability-date-invalid", value=v)
+        return v
+
+    @model_validator(mode="after")
+    def _require_availability_details(self) -> SystemDescription:
+        """§8.2: Available needs ``availability_url``, Preview ``target_availability_date``."""
+        status = self.system_availability_status
+        if status is SystemAvailabilityStatus.AVAILABLE and self.availability_url is None:
+            raise Invalid("system-description-valid", "availability-url-missing")
+        if status is SystemAvailabilityStatus.PREVIEW and self.target_availability_date is None:
+            raise Invalid("system-description-valid", "availability-date-missing")
+        return self
 
     @field_validator("input_token_average", "output_token_average", mode="before")
     @classmethod

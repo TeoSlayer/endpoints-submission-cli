@@ -187,7 +187,14 @@ def submissions_update(
         _console.print("[cyan]Assembling submission folder…[/cyan]")
         try:
             submission_dir = build_submission_folder(
-                archives, division, availability, tmp_path / "bundle", submission_id
+                archives,
+                division,
+                availability,
+                tmp_path / "bundle",
+                submission_id,
+                target_availability_date=(
+                    target_availability_date or current_sub.get("target_availability_date")
+                ),
             )
         except SubmissionBuildError as exc:
             _console.print(f"[bold red]Build error:[/bold red] {exc}")

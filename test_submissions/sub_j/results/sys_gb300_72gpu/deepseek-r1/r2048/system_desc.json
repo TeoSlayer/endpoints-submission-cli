@@ -46,7 +46,6 @@
   "model_id": "deepseek-r1",
   "system_node_ensemble_count": 1,
   "system_node_ensemble_total": 1,
-  "publication_status": "Available",
   "node_config": "8x H100 test node",
   "config_summary": {
     "disaggregated": null,
@@ -57,5 +56,8 @@
     "batch": null
   },
   "cooling": "Liquid-cooled",
+  "system_availability_status": "Available",
+  "availability_url": "https://example.com/systems",
+  "shortened_system_name": "sys_gb300_72gpu",
   "tps_utilization": 0.365419
 }

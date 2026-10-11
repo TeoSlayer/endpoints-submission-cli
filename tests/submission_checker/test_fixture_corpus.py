@@ -78,12 +78,23 @@ class TestCorpusLayout:
             assert layout.resolve_shared_path(submission, point["shared_src"]) is not None
             assert layout.resolve_shared_path(submission, point["shared_docs"]) is not None
 
-    def test_system_descriptions_use_publication_status(self, submission: Path) -> None:
-        """§8.2's name for availability; the older spellings are gone from the corpus."""
+    def test_system_descriptions_use_system_availability_status(self, submission: Path) -> None:
+        """§8.2's name for availability; the legacy spellings are gone from the corpus."""
         for path in (submission / layout.RESULTS_DIR).rglob(layout.SYSTEM_DESC_JSON):
             desc = json.loads(path.read_text())
-            assert "publication_status" in desc, path
-            assert "system_availability_status" not in desc, path
+            assert "system_availability_status" in desc, path
+            assert "publication_status" not in desc, path
+            assert "availability_status" not in desc, path
+
+    def test_system_descriptions_carry_section_8_2_conditional_fields(
+        self, submission: Path
+    ) -> None:
+        """§8.2: a short name of at most 20 characters, and an Available system's URL."""
+        for path in (submission / layout.RESULTS_DIR).rglob(layout.SYSTEM_DESC_JSON):
+            desc = json.loads(path.read_text())
+            assert 0 < len(desc["shortened_system_name"]) <= 20, path
+            if desc["system_availability_status"] == "Available":
+                assert desc["availability_url"], path
 
     def test_node_types_nest_accelerator_info(self, submission: Path) -> None:
         """§8.2.1 moved the flat accelerator_* node fields into accelerator_info[]."""

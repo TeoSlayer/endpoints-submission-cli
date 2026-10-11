@@ -197,6 +197,7 @@ def submissions_create(
                 tmp_path / "bundle",
                 shared_src_dirs=shared_src_dirs,
                 shared_docs_dirs=shared_docs_dirs,
+                target_availability_date=target_availability_date,
             )
         except SubmissionBuildError as exc:
             _console.print(f"[bold red]Build error:[/bold red] {exc}")

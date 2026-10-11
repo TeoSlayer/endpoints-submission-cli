@@ -234,6 +234,75 @@ class TestBuildSubmissionFolder:
         data = json.loads(jsons[0].read_text())
         assert data["division"] == "Serviced"
 
+    @staticmethod
+    def _built_system_desc(org_dir: Path) -> dict:
+        (path,) = _submission_root(org_dir).rglob("system_desc.json")
+        return json.loads(path.read_text())
+
+    def _archive_with_desc(self, run_folder: Path, tmp_path: Path, **changes: object) -> Path:
+        """The fixture run with its system_desc.json changed (a None value deletes the key)."""
+        desc = json.loads((run_folder / "system_desc.json").read_text())
+        for key, value in changes.items():
+            if value is None:
+                desc.pop(key, None)
+            else:
+                desc[key] = value
+        (run_folder / "system_desc.json").write_text(json.dumps(desc))
+        archive = tmp_path / "changed.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(run_folder, arcname="changed")
+        return archive
+
+    def test_writes_system_availability_status(self, run_archive: Path, tmp_path: Path) -> None:
+        """§8.2 names the field system_availability_status; the CLI value is authoritative."""
+        data = self._built_system_desc(
+            build_submission_folder([("run-001", run_archive)], "standardized", "rdi", tmp_path)
+        )
+        assert data["system_availability_status"] == "RDI"
+        assert "publication_status" not in data
+
+    def test_legacy_publication_status_replaced(self, run_folder: Path, tmp_path: Path) -> None:
+        """A stale legacy spelling is dropped, not left to contradict the CLI value."""
+        archive = self._archive_with_desc(run_folder, tmp_path, publication_status="Preview")
+        data = self._built_system_desc(
+            build_submission_folder([("r", archive)], "standardized", "available", tmp_path / "o")
+        )
+        assert data["system_availability_status"] == "Available"
+        assert "publication_status" not in data
+
+    def test_available_without_availability_url_raises(
+        self, run_folder: Path, tmp_path: Path
+    ) -> None:
+        archive = self._archive_with_desc(run_folder, tmp_path, availability_url=None)
+        with pytest.raises(SubmissionBuildError, match="availability_url"):
+            build_submission_folder([("r", archive)], "standardized", "available", tmp_path / "o")
+
+    def test_preview_takes_target_availability_date_from_cli(
+        self, run_archive: Path, tmp_path: Path
+    ) -> None:
+        data = self._built_system_desc(
+            build_submission_folder(
+                [("run-001", run_archive)],
+                "standardized",
+                "preview",
+                tmp_path,
+                target_availability_date="2027-03-31",
+            )
+        )
+        assert data["system_availability_status"] == "Preview"
+        assert data["target_availability_date"] == "2027-03-31"
+
+    def test_preview_without_target_availability_date_raises(
+        self, run_archive: Path, tmp_path: Path
+    ) -> None:
+        with pytest.raises(SubmissionBuildError, match="target_availability_date"):
+            build_submission_folder([("run-001", run_archive)], "standardized", "preview", tmp_path)
+
+    def test_too_long_shortened_system_name_raises(self, run_folder: Path, tmp_path: Path) -> None:
+        archive = self._archive_with_desc(run_folder, tmp_path, shortened_system_name="x" * 21)
+        with pytest.raises(SubmissionBuildError, match="shortened_system_name"):
+            build_submission_folder([("r", archive)], "standardized", "available", tmp_path / "o")
+
     def _make_archive(
         self, run_folder: Path, tmp_path: Path, name: str, concurrency: int, run_type: str
     ) -> Path:

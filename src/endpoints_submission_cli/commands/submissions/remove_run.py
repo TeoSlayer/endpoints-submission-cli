@@ -117,7 +117,12 @@ def submissions_remove_run(submission_id: str, run_id: str, token: str | None) -
         availability = sub_out.get("availability", "available")
         try:
             submission_dir = build_submission_folder(
-                archives, division, availability, tmp_path / "bundle", submission_id
+                archives,
+                division,
+                availability,
+                tmp_path / "bundle",
+                submission_id,
+                target_availability_date=sub_out.get("target_availability_date"),
             )
         except SubmissionBuildError as exc:
             _console.print(f"[bold red]Build error:[/bold red] {exc}")

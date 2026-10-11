@@ -188,7 +188,9 @@ _SYSTEM_DESC = {
     "submitter_contact": "contact@example.com",
     "system_name": "test-sys",
     "system_category": "datacenter",
-    "publication_status": "Available",
+    "shortened_system_name": "test-sys",
+    "system_availability_status": "Available",
+    "availability_url": "https://example.com/test-sys",
     "max_supported_concurrency": 1024,
     "serving_framework": "vLLM",
     "node_types": [

@@ -441,6 +441,9 @@ layouts that put `result_summary.json` at the top level are not accepted by
 ```json
 {
   "system_name": "H100x8-vLLM",
+  "shortened_system_name": "H100x8-vLLM",
+  "system_availability_status": "Available",
+  "availability_url": "https://example.com/h100x8",
   "system_category": "datacenter",
   "accelerator_model_name": "NVIDIA H100 SXM5 80GB",
   "accelerators_per_node": 8,
@@ -449,6 +452,11 @@ layouts that put `result_summary.json` at the top level are not accepted by
   ...
 }
 ```
+
+§8.2 requires `shortened_system_name` (at most 20 characters), `availability_url` when
+the system is Available, and `target_availability_date` (`YYYY-MM-DD`) when it is
+Preview. `submissions create` overwrites `system_availability_status` with
+`--availability`, and writes `--target-availability-date` into the description when given.
 
 **`config.yaml`** — benchmark run configuration:
 
