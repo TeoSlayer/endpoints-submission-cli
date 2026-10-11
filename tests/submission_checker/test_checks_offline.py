@@ -15,9 +15,11 @@ import pytest
 from submission_checker.models import (
     AccuracyResult,
     PointConfig,
+    PointResult,
     RegionPlacement,
     RuntimeSettings,
     Severity,
+    compute_regions,
 )
 
 from .conftest import _REGIONS, _config, _model_ctx, _summary
@@ -426,6 +428,114 @@ class TestAccuracyCoverage:
 
 
 @pytest.mark.unit
+class TestAccuracyRunCount:
+    """§4.3 / §9.1 "Accuracy run count": exactly N results, one per mandatory point.
+
+    "`N` is a fixed count, not a floor. A submission carrying more than one accuracy
+    result for a region, or any accuracy result at a submitter's-choice point, is
+    non-conforming".
+    """
+
+    #: C_max=1024, C_min=16: Low Concurrency is 17–26, so 17–26 lies in both it and
+    #: the fixed 1–32 Ultra Low Concurrency range.
+    _OVERLAP = compute_regions(1024, 16)
+
+    def _pts(self, tmp_path: Path, concurrencies):
+        return [(tmp_path / f"r{c}" / "point.yaml", _config(concurrency=c)) for c in concurrencies]
+
+    def _elected_curve(self, tmp_path: Path):
+        elected = _offline_config(concurrency=1024, offline="elected")
+        return [*self._pts(tmp_path, [16, 40, 100, 512]), (tmp_path / "r1024.yaml", elected)]
+
+    def _ctx(self, tmp_path: Path, points, with_accuracy, regions=_REGIONS):
+        return _model_ctx(
+            tmp_path,
+            valid_points=points,
+            accuracy_by_point=dict.fromkeys(with_accuracy, _ACCURACY),
+            regions=regions,
+        )
+
+    @staticmethod
+    def _errors(ctx, key: str | None = None):
+        return [
+            r
+            for r in ctx._check_results
+            if r.rule == "accuracy-coverage"
+            and r.severity == Severity.ERROR
+            and (key is None or r.key == key)
+        ]
+
+    def test_extra_result_in_a_band_errors(self, tmp_path: Path) -> None:
+        """A second High Concurrency result is either a duplicate or a choice point."""
+        concurrencies = [16, 40, 100, 512, 768]
+        ctx = self._ctx(tmp_path, self._pts(tmp_path, concurrencies), concurrencies)
+        hits = self._errors(ctx, "extra-results")
+        assert len(hits) == 1 and "r768" in hits[0].message
+        assert not self._errors(ctx, "missing-bands")
+
+    def test_choice_points_without_accuracy_pass(self, tmp_path: Path) -> None:
+        """The three submitter's-choice points carry no accuracy run, and need none."""
+        points = self._pts(tmp_path, [16, 40, 100, 200, 512, 768, 1024])
+        ctx = self._ctx(tmp_path, points, [16, 40, 100, 512])
+        assert not self._errors(ctx)
+        assert [r for r in ctx._check_results if r.rule == "accuracy-coverage" and r.passed]
+
+    def test_one_result_cannot_fill_two_bands(self, tmp_path: Path) -> None:
+        """r20 is in both Ultra Low (1–32) and Low (17–26); one run is not two."""
+        points = self._pts(tmp_path, [16, 20, 88, 512])
+        ctx = self._ctx(tmp_path, points, [20, 88, 512], regions=self._OVERLAP)
+        assert len(self._errors(ctx, "missing-bands")) == 1
+
+    def test_two_overlap_points_fill_both_bands(self, tmp_path: Path) -> None:
+        """Two results in the overlap are matched one to each band."""
+        points = self._pts(tmp_path, [20, 24, 88, 512])
+        ctx = self._ctx(tmp_path, points, [20, 24, 88, 512], regions=self._OVERLAP)
+        assert not self._errors(ctx)
+
+    def test_overlap_point_goes_where_it_is_needed(self, tmp_path: Path) -> None:
+        """r16 can only be Ultra Low, so r20 is read as the Low point, not as extra."""
+        points = self._pts(tmp_path, [16, 20, 88, 512])
+        ctx = self._ctx(tmp_path, points, [16, 20, 88, 512], regions=self._OVERLAP)
+        assert not self._errors(ctx)
+
+    def test_third_result_in_the_overlap_is_extra(self, tmp_path: Path) -> None:
+        points = self._pts(tmp_path, [16, 20, 24, 88, 512])
+        ctx = self._ctx(tmp_path, points, [16, 20, 24, 88, 512], regions=self._OVERLAP)
+        assert len(self._errors(ctx, "extra-results")) == 1
+        assert not self._errors(ctx, "missing-bands")
+
+    def test_dedicated_offline_result_counts_for_no_band(self, tmp_path: Path) -> None:
+        """§5.7.2: a dedicated run "does not satisfy any region-coverage requirement"."""
+        offline = _offline_config(concurrency=512)
+        pts = [*self._pts(tmp_path, [16, 40, 100]), (tmp_path / "rOff.yaml", offline)]
+        ctx = self._ctx(tmp_path, pts, [16, 40, 100, 512])
+        assert self._errors(ctx, "missing-bands")
+        assert not self._errors(ctx, "fail")  # its own Offline result is present
+
+    def test_elected_point_counts_as_high_and_offline(self, tmp_path: Path) -> None:
+        """§5.7.2: the elected point counts "once as its region point and once as the
+        Offline result", so four results satisfy N=5 here."""
+        ctx = self._ctx(tmp_path, self._elected_curve(tmp_path), [16, 40, 100, 1024])
+        assert not self._errors(ctx)
+
+    def test_elected_point_beside_a_high_result_is_the_offline_result(self, tmp_path: Path) -> None:
+        """With r512 as the High point, the elected r1024 is the Offline result alone."""
+        ctx = self._ctx(tmp_path, self._elected_curve(tmp_path), [16, 40, 100, 512, 1024])
+        assert not self._errors(ctx)
+
+    def test_elected_point_without_accuracy_errors(self, tmp_path: Path) -> None:
+        ctx = self._ctx(tmp_path, self._elected_curve(tmp_path), [16, 40, 100, 512])
+        assert self._errors(ctx, "fail")
+
+    def test_result_outside_every_band_is_extra(self, tmp_path: Path) -> None:
+        """A margin point satisfies no region (§5.4), so its result fills no band."""
+        concurrencies = [16, 40, 100, 512, 1100]
+        ctx = self._ctx(tmp_path, self._pts(tmp_path, concurrencies), concurrencies)
+        hits = self._errors(ctx, "extra-results")
+        assert hits and "r1100" in hits[0].message
+
+
+@pytest.mark.unit
 class TestTheTwoOptionsDifferEverywhereTheSpecSaysTheyDo:
     """§5.7.2 offers two ways to satisfy the Offline requirement, and they are not alike.
 
@@ -473,6 +583,36 @@ class TestTheTwoOptionsDifferEverywhereTheSpecSaysTheyDo:
             assert bool(found) is (not exempt), (
                 f"{rule}: offline={offline!r} should {'not ' if exempt else ''}report an error"
             )
+
+    @pytest.mark.parametrize("tpot_p90_ns", [None, 0.0])
+    def test_tpot_p90_exempt_for_option_1_only(
+        self, tmp_path: Path, tpot_p90_ns: float | None
+    ) -> None:
+        """§5.7.1 "Latency metrics do not apply"; §6.5 "it reports only system_tps"."""
+        for offline, exempt in (("dedicated", True), ("elected", False)):
+            result = PointResult.model_validate(
+                {
+                    "config": _offline_config(concurrency=1024, offline=offline),
+                    "summary": _summary(tpot_p90_ns=tpot_p90_ns),
+                    "yaml_path": tmp_path / "point.yaml",
+                },
+                context={"summary_path": tmp_path / "result_summary.json"},
+            )
+            errors = [
+                r
+                for r in result._check_results
+                if r.rule.startswith("metric-consistency-tp") and r.severity == Severity.ERROR
+            ]
+            assert bool(errors) is (not exempt), offline
+            if exempt:
+                assert [
+                    r
+                    for r in result._check_results
+                    if r.rule == "metric-consistency-tpot-p90" and r.key == "exempt"
+                ]
+                assert not [
+                    r for r in result._check_results if r.rule == "metric-consistency-tps-per-user"
+                ]
 
     def test_only_a_dedicated_run_raises_the_point_minimum(self, tmp_path: Path) -> None:
         """§5.7.2: electing "contains one fewer distinct run", so the minimum stays 7."""

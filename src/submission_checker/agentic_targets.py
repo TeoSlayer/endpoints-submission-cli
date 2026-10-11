@@ -16,7 +16,7 @@ agentic benchmarks gate three quantities that do not reduce that way:
 * **Inline accuracy** — each result on its own, from the entry the client scores on
   the performance run (``dataset_type: performance``; see
   :meth:`~submission_checker.models.AccuracyResult.performance_dataset`). Every point
-  that carries one must clear; only one per mandatory region is required
+  that carries one must clear; exactly one per mandatory region is allowed
   (``accuracy-coverage``).
 * **SWE-bench accuracy** — **mean-of-N across points**, not per point: "average one
   SWE-bench accuracy result from each of the four mandatory regions (``N = 4``), then

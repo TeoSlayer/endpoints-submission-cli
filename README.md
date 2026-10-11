@@ -541,8 +541,8 @@ set published after this release.
 | `metric-consistency-accounting` | §14 | `completed + failed == issued` |
 | `metric-consistency-output-tokens` | §14 | `total_output_tokens` ≥ 0 |
 | `metric-consistency-system-tps` | §9.1 | Stored `system_tps` matches the derived value |
-| `metric-consistency-tpot-p90` | §9.1 | Reported TPOT P90 present, finite, strictly positive |
-| `metric-consistency-tps-per-user` | §9.1 | Stored `tps_per_user` matches `1000 / tpot_p90_ms` |
+| `metric-consistency-tpot-p90` | §9.1 | Reported TPOT P90 present, finite, strictly positive; a dedicated Offline run is exempt (§5.7.1, §6.5) |
+| `metric-consistency-tps-per-user` | §9.1 | Stored `tps_per_user` matches `1000 / tpot_p90_ms`; not applied to a dedicated Offline run |
 | `metric-consistency-tps-per-kw` | §4.5.3 | Stored `system_tps_per_kw` matches `system_tps / point_power_kw` — see [per-point normalisation](#per-point-normalisation-453) |
 | `agentic-metric-consistency` | §4.1 | `e2e_avg_interactivity` is derivable from its reported inputs: the per-turn sums, or the client's `output_sequence_lengths.total / (latency.total / 1e9)` when no sample failed (latency is in nanoseconds) |
 
@@ -551,7 +551,7 @@ set published after this release.
 | Rule | Spec | Description |
 |------|------|-------------|
 | `accuracy-present` | §15 | At least one model in the submission carries accuracy results |
-| `accuracy-coverage` | §5.3 | Accuracy at each of the four mandatory bands, plus the Offline point (N=5; N=4 for an agentic benchmark, which has none) |
+| `accuracy-coverage` | §4.3, §5.3 | Exactly one accuracy result in each of the four mandatory bands, plus the Offline point (N=5; N=4 for an agentic benchmark, which has none). A result at any other point is an error, and one result cannot fill two bands |
 | `accuracy-valid` | §15 | `accuracy_results.json` parses correctly |
 | `accuracy-sample-count` | §15 | Issued sample count meets the model's minimum |
 | `accuracy-gate` | §15 | Score meets the benchmark quality target |
@@ -582,11 +582,14 @@ keeps the Offline requirement in force rather than letting one mislabelled point
 it off.
 
 
-Accuracy is **required** once per mandatory region, not at every point:
-`accuracy-coverage` asks for one result in each of the four mandatory bands (plus the
-Offline point for a non-agentic benchmark), and a band with several points needs only
-one of them to carry accuracy. The gates below then judge whatever results a submission
-includes, so every result present must clear.
+Accuracy is **required** once per mandatory region, not at every point, and §4.3 makes
+`N` "a fixed count, not a floor": `accuracy-coverage` asks for exactly one result in
+each of the four mandatory bands (plus the Offline point for a non-agentic benchmark).
+A second result in a band, or one at a submitter's-choice point, is an error — the two
+look the same on disk. A point at concurrency ≤ 32 above `C_min` lies in both Ultra Low
+and Low Concurrency, but its one result fills only one of them; the exception is
+§5.7.2's elected `C_max` point, which counts once as its region point and once as the
+Offline result. The gates below then judge every result present.
 
 Accuracy is gated differently too. §15's gate folds every dataset of a point into one
 sample-weighted score per metric; the agentic benchmarks gate three quantities that do
@@ -595,7 +598,7 @@ three rules above:
 
 | Quantity | Source | Aggregation |
 |---|---|---|
-| Inline accuracy | the `dataset_type: performance` entry in the accuracy results (named `performance` by the client) | each result on its own — every point that carries one must clear. Only one accuracy run per mandatory region is required (`accuracy-coverage`); points without one are not gated |
+| Inline accuracy | the `dataset_type: performance` entry in the accuracy results (named `performance` by the client) | each result on its own — every point that carries one must clear. Exactly one accuracy run per mandatory region is allowed (`accuracy-coverage`); points without one are not gated |
 | SWE-bench accuracy | `swe_bench` in the accuracy results | **mean-of-4** across the mandatory regions (§4.3's multi-turn branch) |
 | OSL per-turn mean | `output_sequence_lengths_full_run.output_sequence_lengths.avg` in `result_summary.json` | per point, against a range |
 
@@ -611,7 +614,8 @@ reported as ungateable rather than passed silently.
 Both agentic scorers report a fraction in [0, 1], which is always rescaled to a
 percentage; a value outside that range is an error, never read as a percentage already.
 The SWE-bench mean takes one value per mandatory band: a result outside the four bands
-is left out, and a band with several results is averaged into one value, with a warning.
+is left out, and a band with several results is averaged into one value, with a warning
+(`accuracy-coverage` rejects such a curve in any case).
 
 ## Programmatic API
 

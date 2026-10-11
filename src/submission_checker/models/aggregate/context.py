@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-__all__ = ["ModelContext"]
+__all__ = ["ModelContext", "accuracy_bands", "match_accuracy_bands"]
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -70,6 +70,53 @@ def _weighted_mean(pairs: list[tuple[float, float | None]]) -> float:
         if total > 0:
             return sum(v * w for v, w in pairs if w is not None) / total
     return sum(v for v, _ in pairs) / len(pairs)
+
+
+def accuracy_bands(concurrency: int, regions: Regions) -> list[str]:
+    """The §5.3 mandatory bands an accuracy result at *concurrency* could fill.
+
+    Ultra Low Concurrency is the fixed range 1–32 while Low Concurrency starts at
+    ``C_min + 1`` (§5.4), so a point in between lies in both and both are listed.
+    """
+    bands: list[str] = []
+    if concurrency <= ULTRA_LOW_CONCURRENCY_MAX:
+        bands.append("ultra_low_concurrency")
+    band = covered_region(concurrency, regions)
+    if band is not None and band != "low_latency":
+        bands.append(band)
+    return bands
+
+
+def match_accuracy_bands(candidates: list[tuple[int, list[str], bool]]) -> dict[str, int]:
+    """Assign each mandatory band at most one result, each result at most one band.
+
+    *candidates* are ``(concurrency, eligible bands, elected)``. Returns band → the
+    concurrency whose result fills it.
+
+    A maximum bipartite matching (augmenting paths), so a result that could fill
+    either Ultra Low or Low goes wherever it leaves the most bands covered, and is
+    never counted for both. Augmenting never unmatches a point already matched, so
+    passing elected points last means an elected C_max result only takes the High
+    band when no other point's result can: §5.7.2 lets the elected point count "once
+    as its region point and once as the Offline result", but where another High point
+    carries a result the elected one is read as the Offline result alone.
+    """
+    owner: dict[str, int] = {}
+    options = {c: bands for c, bands, _ in candidates}
+
+    def augment(concurrency: int, seen: set[str]) -> bool:
+        for band in options[concurrency]:
+            if band in seen:
+                continue
+            seen.add(band)
+            if band not in owner or augment(owner[band], seen):
+                owner[band] = concurrency
+                return True
+        return False
+
+    for concurrency, _bands, _elected in candidates:
+        augment(concurrency, set())
+    return owner
 
 
 class ModelContext(BaseModel):
@@ -528,16 +575,46 @@ class ModelContext(BaseModel):
             )
         return self
 
+    def _band_candidates(self) -> list[tuple[int, list[str], bool]]:
+        """Accuracy-carrying points that may fill a mandatory band, with their options.
+
+        Returns ``(concurrency, eligible bands, elected)`` per point, non-elected points
+        first; :func:`accuracy_bands` says which bands each could fill and
+        :func:`match_accuracy_bands` which one it does. A dedicated Offline run fills
+        none — §5.7.2 says it "does not satisfy any region-coverage requirement" — and
+        its result is the Offline point's, checked separately.
+        """
+        assert self.regions is not None
+        dedicated = {c.concurrency for _, c in self.valid_points if c.offline == OFFLINE_DEDICATED}
+        elected = {c.concurrency for _, c in self.valid_points if c.offline == OFFLINE_ELECTED}
+        candidates: list[tuple[int, list[str], bool]] = []
+        for concurrency in sorted(set(self._present_concurrencies)):
+            if concurrency not in self.accuracy_by_point or concurrency in dedicated:
+                continue
+            bands = accuracy_bands(concurrency, self.regions)
+            candidates.append((concurrency, bands, concurrency in elected))
+        # Elected points last: see match_accuracy_bands.
+        candidates.sort(key=lambda item: item[2])
+        return candidates
+
     @model_validator(mode="after")
     def _check_accuracy_coverage(self) -> ModelContext:
-        """§5.3: accuracy is required at N points, not once per submission.
+        """§4.3, §5.3, §9.1: exactly one accuracy result per mandatory point — N in all.
 
         The four mandatory concurrency points — one in Ultra Low Concurrency and one
         in each of Low, Medium and High — plus the Offline point. N is 5 for a
         non-agentic benchmark and 4 for an agentic one.
 
-        Reported per band rather than as a bare count, because "5 accuracy runs" all
-        clustered in one region satisfies a count and not the requirement.
+        §4.3: "`N` is a fixed count, not a floor. A submission carrying more than one
+        accuracy result for a region, or any accuracy result at a submitter's-choice
+        point, is non-conforming". Submitter's-choice points share bands with the
+        mandatory ones and look the same on disk, so a result at one shows up as a
+        second result for its band, and both readings are reported as one error.
+
+        Each result fills at most one band (:func:`match_accuracy_bands`): a point ≤ 32 that is
+        also in the Low Concurrency region is one run, and counting it for both would
+        let N − 1 runs pass. The one exception is §5.7.2's elected C_max point, which
+        counts "once as its region point and once as the Offline result".
 
         The four mandatory bands are checked the same way either way; N differs only
         because the Offline row below iterates ``offline_points``, which an agentic
@@ -547,17 +624,11 @@ class ModelContext(BaseModel):
         if self.regions is None or not self._present_concurrencies:
             return self
 
-        covered: set[str] = set()
-        for concurrency in self._present_concurrencies:
-            if concurrency not in self.accuracy_by_point:
-                continue
-            if concurrency <= ULTRA_LOW_CONCURRENCY_MAX:
-                covered.add("ultra_low_concurrency")
-            band = covered_region(concurrency, self.regions)
-            if band is not None and band != "low_latency":
-                covered.add(band)
+        candidates = self._band_candidates()
+        owner = match_accuracy_bands(candidates)
+        n = 4 if self.is_agentic else 5
 
-        missing = [band for band in _MANDATORY_BANDS if band not in covered]
+        missing = [band for band in _MANDATORY_BANDS if band not in owner]
         if missing:
             self._check_results.append(
                 err(
@@ -567,14 +638,28 @@ class ModelContext(BaseModel):
                     bands=", ".join(_BAND_LABELS[band] for band in missing),
                 )
             )
-        else:
+
+        filled = set(owner.values())
+        extra = [c for c, _bands, elected in candidates if c not in filled and not elected]
+        if extra:
+            self._check_results.append(
+                err(
+                    "accuracy-coverage",
+                    "extra-results",
+                    self.points_dir,
+                    listed=", ".join(f"r{c}" for c in extra),
+                    value=n,
+                )
+            )
+
+        if not missing and not extra:
             self._check_results.append(
                 ok(
                     "accuracy-coverage",
                     "pass",
                     self.points_dir,
                     accuracy_by_point_count=len(self.accuracy_by_point),
-                    value=4 if self.is_agentic else 5,
+                    value=n,
                 )
             )
 
@@ -711,8 +796,9 @@ class ModelContext(BaseModel):
     def _mandatory_band(self, concurrency: int) -> str | None:
         """The §5.3 mandatory band a point's accuracy result counts towards, or ``None``.
 
-        One band per point, unlike ``accuracy-coverage``, which lets a low point count
-        towards two bands at once: a mean over bands must not count one result twice.
+        One band per point: a mean over bands must not count one result twice. A point
+        ≤ 32 is read as Ultra Low here; ``accuracy-coverage`` settles the overlap with
+        Low Concurrency by matching, and rejects a curve whose results do not fit.
         """
         if concurrency <= ULTRA_LOW_CONCURRENCY_MAX:
             return "ultra_low_concurrency"
@@ -734,6 +820,8 @@ class ModelContext(BaseModel):
         points share bands with the mandatory ones and look the same on disk. Picking
         one would let a submitter choose which result counts, so those results are
         averaged into one value for the band, and the curve is warned about it.
+        ``accuracy-coverage`` rejects such a curve anyway (§4.3 allows one per band);
+        averaging only keeps this gate's verdict independent of that one.
 
         A short set is still gated, on the mean of the bands present, and said to be
         short: the missing results are ``accuracy-coverage``'s report, and staying
