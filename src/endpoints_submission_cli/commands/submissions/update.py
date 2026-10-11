@@ -53,7 +53,8 @@ def _rollback_update(token: str, submission_id: str, original_run_ids: list[str]
     default=None,
     help=(
         "Embargo datetime in ISO 8601 with a time zone, e.g. 2026-12-01T16:00:00Z (UTC) or "
-        "2026-12-01T08:00:00-08:00 (Pacific)."
+        "2026-12-01T08:00:00-08:00 (Pacific). Moves an embargo declared at submission; "
+        "one cannot be added later."
     ),
 )
 def submissions_update(

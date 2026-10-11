@@ -348,7 +348,9 @@ def create_submission(
             the user has agreed to their results being made public before review.
         target_availability_date: ``YYYY-MM-DD``. Required for ``preview``.
         embargo_date: Embargo in ISO 8601 with a time zone (e.g. ``2026-12-01T16:00:00Z``).
-            A time without one is rejected.
+            A time without one is rejected. Nothing is published before it; without
+            ``provisional`` the review stays confidential. It can be moved later but
+            not added, so it must be declared here.
         dry_run: Assemble the bundle and run the checker, without submitting.
         test: Mark it a test submission, not a real results entry.
     """
@@ -393,7 +395,8 @@ def update_submission(
         run_ids: Replaces the submission's whole run list.
         target_availability_date: ``YYYY-MM-DD``.
         embargo_date: Embargo in ISO 8601 with a time zone (e.g. ``2026-12-01T16:00:00Z``).
-            A time without one is rejected.
+            A time without one is rejected. Moves an embargo declared at submission;
+            one cannot be added to a submission created without one.
     """
     return _run_text(
         "submissions",
