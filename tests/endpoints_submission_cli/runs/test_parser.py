@@ -41,6 +41,33 @@ class TestParseRunFolder:
         assert "config" in payload
         assert "result_summary" in payload
 
+    def test_point_yaml_sent_as_point_config(self, endpoints_run_folder: Path) -> None:
+        payload = parse_run_folder(endpoints_run_folder)
+        point = yaml.safe_load((endpoints_run_folder / "point.yaml").read_text())
+        assert payload["point_config"] == point
+
+    def test_system_power_sent_with_derived_figures(self, endpoints_run_folder: Path) -> None:
+        payload = parse_run_folder(endpoints_run_folder)
+        raw = json.loads((endpoints_run_folder / "system_power.json").read_text())
+        power = payload["system_power"]
+        # The descriptor itself passes through untouched.
+        assert {k: v for k, v in power.items() if k != "derived"} == raw
+        derived = power["derived"]
+        # 2 x 350 W CPU + 8 x 700 W GPU + 3500 W scale-up, +50% air overhead.
+        assert derived["provisioned_power_kw"] == 14.7
+        assert derived["point_power_kw"] == 14.7  # one node, fully engaged
+        summary = payload["result_summary"]
+        tps = summary["output_sequence_lengths"]["total"] / (summary["duration_ns"] / 1e9)
+        assert derived["system_tps_per_kw"] == round(tps / 14.7, 1)
+        assert derived["mlc_estimated_power"] is False
+        assert derived["problems"] == []
+
+    def test_no_system_power_file_omits_the_field(self, endpoints_run_folder: Path) -> None:
+        (endpoints_run_folder / "system_power.json").unlink()
+        payload = parse_run_folder(endpoints_run_folder)
+        assert "system_power" not in payload
+        assert "point_config" in payload
+
     def test_system_info_passthrough(self, endpoints_run_folder: Path) -> None:
         payload = parse_run_folder(endpoints_run_folder)
         si = payload["system_info"]
