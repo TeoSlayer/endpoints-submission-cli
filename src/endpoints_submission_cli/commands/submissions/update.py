@@ -18,6 +18,7 @@ from ...submissions import api as subs_api
 from ...submissions.builder import build_submission_folder, create_bundle_archive
 from ...submissions.formatters import print_submission_detail
 from ..common import (
+    _check_embargo_date,
     _console,
     _get_token,
     _run_submission_checker,
@@ -50,7 +51,10 @@ def _rollback_update(token: str, submission_id: str, original_run_ids: list[str]
 @click.option(
     "--embargo-date",
     default=None,
-    help="Embargo datetime in ISO 8601 format (e.g. 2025-12-01T00:00:00).",
+    help=(
+        "Embargo datetime in ISO 8601 with a time zone, e.g. 2026-12-01T16:00:00Z (UTC) or "
+        "2026-12-01T08:00:00-08:00 (Pacific)."
+    ),
 )
 def submissions_update(
     submission_id: str,
@@ -69,6 +73,9 @@ def submissions_update(
     would add one is rejected.
     """
     resolved_token = _get_token(token)
+    if embargo_date is not None:
+        # A past date is allowed here: moving the embargo up is how a submitter lifts it.
+        _check_embargo_date(embargo_date, require_future=False)
 
     if not run_ids and target_availability_date is None and embargo_date is None:
         _console.print("[yellow]Nothing to update — provide at least one field.[/yellow]")

@@ -19,6 +19,7 @@ from .. import _http
 from ..exceptions import AuthError, SubmissionCheckError
 
 __all__ = [
+    "_check_embargo_date",
     "_confirm_provisional",
     "_console",
     "_get_token",
@@ -33,6 +34,37 @@ _PROVISIONAL_WARNING = (
     "WARNING: This will make these results publicly viewable on the visualizer "
     "during the next cohort with a 'peer review pending' disclaimer."
 )
+
+
+def _check_embargo_date(value: str, *, require_future: bool) -> None:
+    """Exit 1 unless *value* is an ISO 8601 date-time with an explicit time zone.
+
+    A bare time is rejected rather than guessed: the API would read it in its own
+    server's time zone, and publication dates run on Pacific time, so the submitter
+    has to say which instant they mean. The value is sent on unchanged.
+    """
+    try:
+        # fromisoformat only accepts a trailing Z from Python 3.11.
+        text = value.strip()
+        parsed = datetime.datetime.fromisoformat(
+            text[:-1] + "+00:00" if text.endswith("Z") else text
+        )
+    except ValueError:
+        _console.print(
+            f"[bold red]Invalid --embargo-date {value!r}:[/bold red] expected ISO 8601, "
+            "e.g. 2026-12-01T16:00:00Z or 2026-12-01T08:00:00-08:00."
+        )
+        sys.exit(1)
+    if parsed.tzinfo is None:
+        _console.print(
+            f"[bold red]--embargo-date {value} has no time zone.[/bold red] Add one, e.g. "
+            f"{value}Z (UTC) or {value}-08:00 (Pacific). Publication dates are at "
+            "8:00 AM Pacific."
+        )
+        sys.exit(1)
+    if require_future and parsed <= datetime.datetime.now(datetime.timezone.utc):
+        _console.print(f"[bold red]--embargo-date {value} is not in the future.[/bold red]")
+        sys.exit(1)
 
 
 def _confirm_provisional(assume_yes: bool) -> None:

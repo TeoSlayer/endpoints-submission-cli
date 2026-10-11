@@ -21,6 +21,7 @@ from ...submissions.builder import (
     set_submission_id,
 )
 from ..common import (
+    _check_embargo_date,
     _confirm_provisional,
     _console,
     _get_token,
@@ -107,7 +108,10 @@ __all__ = ["submissions_create"]
 @click.option(
     "--embargo-date",
     default=None,
-    help="Embargo datetime in ISO 8601 format (e.g. 2025-12-01T00:00:00).",
+    help=(
+        "Embargo datetime in ISO 8601 with a time zone, e.g. 2026-12-01T16:00:00Z (UTC) or "
+        "2026-12-01T08:00:00-08:00 (Pacific). Must be in the future."
+    ),
 )
 @click.option(
     "--dry-run",
@@ -147,7 +151,9 @@ def submissions_create(
       5. Upload the submission bundle.
     """
     run_ids_list = list(run_ids)
-    # Ask before any downloads — a declined prompt should cost nothing.
+    # Validate and ask before any downloads — a typo or a declined prompt should cost nothing.
+    if embargo_date:
+        _check_embargo_date(embargo_date, require_future=True)
     if provisional and not dry_run:
         _confirm_provisional(assume_yes)
     resolved_token = _get_token(token)

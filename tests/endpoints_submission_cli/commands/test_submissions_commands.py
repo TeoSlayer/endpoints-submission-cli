@@ -30,6 +30,11 @@ _PR_NUMBER = 42
 _runner = CliRunner()
 
 
+def _flat(output: str) -> str:
+    """Output with whitespace collapsed, so Rich's line wrapping doesn't split a phrase."""
+    return " ".join(output.split())
+
+
 def _run_app(*args: str) -> None:
     """Invoke the app and assert exit code 0."""
     result = _runner.invoke(app, list(args))
@@ -1144,6 +1149,86 @@ class TestProvisionalConfirmation:
         assert result.exit_code == 0, result.output
         assert _PROMPT_TEXT not in result.output
         mock_create.assert_not_called()
+
+
+@pytest.mark.unit
+class TestEmbargoDateTimeZone:
+    """--embargo-date must carry a time zone; a bare time is rejected, never guessed."""
+
+    _CREATE_ARGS = TestProvisionalConfirmation._CREATE_ARGS
+
+    @pytest.mark.parametrize("value", ["2099-01-06T16:00:00Z", "2099-01-06T08:00:00-08:00"])
+    def test_value_with_time_zone_is_sent_unchanged(self, tmp_path: Path, value: str) -> None:
+        with _patched_create(tmp_path) as mock_create:
+            result = _runner.invoke(app, [*self._CREATE_ARGS, "--embargo-date", value])
+        assert result.exit_code == 0, result.output
+        assert mock_create.call_args[0][1]["embargo_date"] == value
+
+    @pytest.mark.parametrize(
+        ("value", "message"),
+        [
+            ("2099-01-06T16:00:00", "has no time zone"),
+            ("next tuesday", "Invalid --embargo-date"),
+            ("2020-01-01T00:00:00Z", "not in the future"),
+        ],
+        ids=["bare-time", "unparseable", "past"],
+    )
+    def test_bad_value_exits_before_downloading(
+        self, tmp_path: Path, value: str, message: str
+    ) -> None:
+        with _patched_create(tmp_path) as mock_create:
+            with patch("endpoints_submission_cli.runs.api.download_run_archive") as mock_download:
+                result = _runner.invoke(app, [*self._CREATE_ARGS, "--embargo-date", value])
+        assert result.exit_code == 1
+        assert message in _flat(result.output)
+        mock_download.assert_not_called()
+        mock_create.assert_not_called()
+
+    def test_bare_time_message_suggests_offsets(self, tmp_path: Path) -> None:
+        with _patched_create(tmp_path):
+            result = _runner.invoke(
+                app, [*self._CREATE_ARGS, "--embargo-date", "2099-01-06T16:00:00"]
+            )
+        output = _flat(result.output)
+        assert "2099-01-06T16:00:00Z (UTC)" in output
+        assert "2099-01-06T16:00:00-08:00 (Pacific)" in output
+
+    def test_update_allows_a_past_date(self) -> None:
+        """Moving the embargo up, even into the past, is how a submitter lifts it."""
+        with patch("endpoints_submission_cli._http.get_token", return_value=TOKEN):
+            with patch(
+                "endpoints_submission_cli.submissions.api.update_submission",
+                return_value=SUBMISSION_OUT,
+            ) as mock_patch:
+                _run_app(
+                    "submissions",
+                    "update",
+                    "--submission-id",
+                    SUBMISSION_ID,
+                    "--embargo-date",
+                    "2020-01-01T00:00:00Z",
+                    *_TOKEN_ARGS,
+                )
+        assert mock_patch.call_args[0][2] == {"embargo_date": "2020-01-01T00:00:00Z"}
+
+    @pytest.mark.parametrize("value", ["2099-01-06T16:00:00", "soon"])
+    def test_update_rejects_bad_value_before_patching(self, value: str) -> None:
+        with patch("endpoints_submission_cli._http.get_token", return_value=TOKEN):
+            with patch("endpoints_submission_cli.submissions.api.update_submission") as mock_patch:
+                result = _runner.invoke(
+                    app,
+                    [
+                        "submissions",
+                        "update",
+                        "--submission-id",
+                        SUBMISSION_ID,
+                        "--embargo-date",
+                        value,
+                        *_TOKEN_ARGS,
+                    ],
+                )
+        assert result.exit_code == 1
+        mock_patch.assert_not_called()
 
 
 class TestNoPublicationCycleFlag:

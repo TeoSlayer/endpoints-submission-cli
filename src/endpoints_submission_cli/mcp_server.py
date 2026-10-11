@@ -347,7 +347,8 @@ def create_submission(
         confirm_public_provisional: Must be true with ``provisional``. Set it only after
             the user has agreed to their results being made public before review.
         target_availability_date: ``YYYY-MM-DD``. Required for ``preview``.
-        embargo_date: Embargo in ISO 8601 (e.g. ``2025-12-01T00:00:00``).
+        embargo_date: Embargo in ISO 8601 with a time zone (e.g. ``2026-12-01T16:00:00Z``).
+            A time without one is rejected.
         dry_run: Assemble the bundle and run the checker, without submitting.
         test: Mark it a test submission, not a real results entry.
     """
@@ -391,7 +392,8 @@ def update_submission(
         submission_id: The submission's UUID.
         run_ids: Replaces the submission's whole run list.
         target_availability_date: ``YYYY-MM-DD``.
-        embargo_date: Embargo in ISO 8601 (e.g. ``2025-12-01T00:00:00``).
+        embargo_date: Embargo in ISO 8601 with a time zone (e.g. ``2026-12-01T16:00:00Z``).
+            A time without one is rejected.
     """
     return _run_text(
         "submissions",

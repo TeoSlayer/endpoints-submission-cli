@@ -181,7 +181,7 @@ _COVERAGE: dict[tuple[str, ...], list[tuple[Callable[..., Any], dict[str, Any]]]
                 "provisional": True,
                 "confirm_public_provisional": True,
                 "target_availability_date": "2026-01-01",
-                "embargo_date": "2026-01-01T00:00:00",
+                "embargo_date": "2026-01-01T00:00:00Z",
                 "dry_run": True,
                 "test": True,
             },
@@ -194,7 +194,7 @@ _COVERAGE: dict[tuple[str, ...], list[tuple[Callable[..., Any], dict[str, Any]]]
                 "submission_id": "s",
                 "run_ids": ["r"],
                 "target_availability_date": "2026-01-01",
-                "embargo_date": "2026-01-01T00:00:00",
+                "embargo_date": "2026-01-01T00:00:00Z",
             },
         )
     ],
