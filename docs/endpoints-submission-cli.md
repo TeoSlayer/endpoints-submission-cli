@@ -270,8 +270,16 @@ endpoints-submission-cli submissions create \
 | `--provisional` | no | Request provisional publication (default: false). Results become publicly viewable on the visualizer during the next cohort with a `peer review pending` disclaimer. Prompts for confirmation before submitting |
 | `--yes`, `-y` | no | Skip the `--provisional` confirmation prompt (for non-interactive use) |
 | `--target-availability-date DATE` | no | `YYYY-MM-DD`; required when availability is `preview` |
-| `--embargo-date DATETIME` | no | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. Must be in the future. |
+| `--embargo-date DATETIME` | no | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. Must be in the future. Nothing is published before it. It can be moved later with `submissions update` but not added, so declare it here. |
 | `--dry-run` | no | Assemble folder, run checker, print layout — exit without submitting |
+
+The publication mode (Submission Rules §6.2) follows from `--provisional` and `--embargo-date`, and is fixed once the submission is created:
+
+| `--provisional` | `--embargo-date` | Mode |
+|---|---|---|
+| no | no | Confidential review; published at the first publication date after finalization. |
+| no | yes | Confidential review; the finalized result is held until the embargo date. |
+| yes | either | Published during review with a `peer review pending` disclaimer, from the embargo date if one is given. |
 
 **If the final status PATCH fails** the submission record and uploaded bundle still
 exist; the failure is a warning, not a fatal error. The CLI does not open the review
@@ -308,7 +316,7 @@ endpoints-submission-cli submissions update \
 | `--token TOKEN` | API token |
 | `--run-ids RUN_ID` | Set the complete run UUID list. Repeatable — pass once per run. Runs not listed are removed. |
 | `--target-availability-date DATE` | Target availability date (`YYYY-MM-DD`) |
-| `--embargo-date DATETIME` | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. |
+| `--embargo-date DATETIME` | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. Moves an embargo declared at submission; one cannot be added to a submission created without one. |
 
 **When `--run-ids` is provided** the command runs a full rebuild:
 

@@ -78,6 +78,25 @@ class TestPrintSubmissionDetail:
         assert "2026-11-C0" in row
         assert "Publication Cycle" not in out
 
+    @pytest.mark.parametrize(
+        ("early_publish", "embargo_date", "mode"),
+        [
+            (False, None, "Confidential"),
+            (False, "2099-01-06T16:00:00Z", "Confidential, embargoed"),
+            (True, None, "Provisional"),
+            (True, "2099-01-06T16:00:00Z", "Provisional"),
+            (None, None, "—"),
+        ],
+    )
+    def test_publication_mode(self, capsys, early_publish, embargo_date, mode) -> None:
+        print_submission_detail(
+            {**SUBMISSION_OUT, "early_publish": early_publish, "embargo_date": embargo_date}
+        )
+        out = capsys.readouterr().out
+        row = next(line for line in out.splitlines() if "Publication Mode" in line)
+        assert row.split("│")[2].strip() == mode
+        assert "Early Publish" not in out
+
     def test_unpublished_cycle_renders_as_dash(self, capsys) -> None:
         print_submission_detail({**SUBMISSION_OUT, "publication_cycle": None})
         out = capsys.readouterr().out

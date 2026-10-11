@@ -1150,6 +1150,18 @@ class TestProvisionalConfirmation:
         assert _PROMPT_TEXT not in result.output
         mock_create.assert_not_called()
 
+    def test_embargo_without_provisional_is_confidential(self, tmp_path: Path) -> None:
+        """Rules §6.2 mode B: an embargo alone neither prompts nor requests early publication."""
+        with _patched_create(tmp_path) as mock_create:
+            result = _runner.invoke(
+                app, [*self._CREATE_ARGS, "--embargo-date", "2099-01-06T16:00:00Z"]
+            )
+        assert result.exit_code == 0, result.output
+        assert _PROMPT_TEXT not in result.output
+        payload = mock_create.call_args[0][1]
+        assert payload["early_publish"] is False
+        assert payload["embargo_date"] == "2099-01-06T16:00:00Z"
+
 
 @pytest.mark.unit
 class TestEmbargoDateTimeZone:

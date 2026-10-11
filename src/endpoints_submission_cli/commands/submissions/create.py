@@ -110,7 +110,9 @@ __all__ = ["submissions_create"]
     default=None,
     help=(
         "Embargo datetime in ISO 8601 with a time zone, e.g. 2026-12-01T16:00:00Z (UTC) or "
-        "2026-12-01T08:00:00-08:00 (Pacific). Must be in the future."
+        "2026-12-01T08:00:00-08:00 (Pacific). Must be in the future. Nothing is published "
+        "before it. Without --provisional, review stays confidential. It can be moved "
+        "later but not added, so declare it here."
     ),
 )
 @click.option(
@@ -224,7 +226,9 @@ def submissions_create(
             "availability": availability,
             "run_ids": run_ids_list,
             "is_test": is_test,
-            # Wire field is still early_publish — the API schema has not been renamed.
+            # The rules §6.2 mode is early_publish plus embargo_date: neither is
+            # confidential, an embargo alone is confidential and embargoed, and
+            # early_publish is provisional with or without one.
             "early_publish": provisional,
         }
         if target_availability_date:

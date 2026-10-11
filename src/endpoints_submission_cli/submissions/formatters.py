@@ -17,6 +17,16 @@ __all__ = ["print_submissions_table", "print_submission_detail"]
 _console = Console()
 
 
+def _publication_mode(submission: dict[str, Any]) -> str:
+    """Submission Rules §6.2 mode, from early_publish and embargo_date."""
+    early_publish = submission.get("early_publish")
+    if early_publish is None:
+        return DASH
+    if early_publish:
+        return "Provisional"
+    return "Confidential, embargoed" if submission.get("embargo_date") else "Confidential"
+
+
 def print_submissions_table(submissions: list[dict[str, Any]]) -> None:
     """Print a summary table of submission records (SubmissionOut schema)."""
     if not submissions:
@@ -72,7 +82,7 @@ def print_submission_detail(submission: dict[str, Any]) -> None:
         ("Division", fmt_str(submission.get("division"))),
         ("Scenario", fmt_str(submission.get("scenario"))),
         ("Availability", fmt_str(submission.get("availability"))),
-        ("Early Publish", fmt_bool(submission.get("early_publish"))),
+        ("Publication Mode", _publication_mode(submission)),
         ("Test Submission", fmt_bool(submission.get("is_test"))),
         # Stamped by the lifecycle manager at publication; nothing assigns it
         # earlier, so it stays — until the submission is actually published.

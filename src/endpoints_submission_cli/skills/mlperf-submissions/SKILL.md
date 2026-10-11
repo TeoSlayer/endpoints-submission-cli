@@ -54,5 +54,10 @@ after they agree.
 Never add `--yes` to `submissions create --provisional` on the user's behalf: it skips
 the confirmation that provisional results become publicly viewable.
 
+Ask about an embargo before `submissions create`, not after: `--embargo-date` can be
+moved later with `submissions update` but cannot be added to a submission created
+without one. Without `--provisional`, an embargo keeps review confidential and holds
+the finalized result until that date.
+
 Use `--test` on `runs create` and `submissions create` when the user is trying things
 out, so the entry is not counted as a real result.
