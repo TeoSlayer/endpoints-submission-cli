@@ -88,7 +88,7 @@ endpoints-submission-cli submissions create \
 | `--provisional` | no | Request provisional publication (default: false). Results become publicly viewable on the visualizer during the next cohort with a `peer review pending` disclaimer. Prompts for confirmation before submitting. |
 | `--yes`, `-y` | no | Skip the `--provisional` confirmation prompt (for non-interactive use). |
 | `--target-availability-date DATE` | no | Target availability date (`YYYY-MM-DD`). Required when `--availability preview`. |
-| `--embargo-date DATETIME` | no | Embargo datetime in ISO 8601 format, e.g. `2025-12-01T00:00:00`. |
+| `--embargo-date DATETIME` | no | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. Must be in the future. |
 | `--dry-run` | no | Assemble folder and run checker, then print the folder layout and exit without creating the submission or PR. |
 
 There is no publication-cycle flag. Nobody picks a cycle at submit time: the lifecycle manager publishes a finalized submission on the first publication date after it is finalized, later if it is under embargo or carries non-response penalties, and records the cycle it published in.
@@ -250,7 +250,7 @@ endpoints-submission-cli submissions update \
 | `--token TOKEN` | no | API key. |
 | `--run-ids RUN_ID` | no (repeatable) | Replace the complete run list. Pass once per run. Runs not listed are removed. |
 | `--target-availability-date DATE` | no | Target availability date (`YYYY-MM-DD`). |
-| `--embargo-date DATETIME` | no | Embargo datetime in ISO 8601 format. |
+| `--embargo-date DATETIME` | no | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. |
 
 Providing no flags prints a warning and makes no API call.
 
@@ -294,7 +294,7 @@ endpoints-submission-cli submissions update \
 # Update the embargo date
 endpoints-submission-cli submissions update \
   --submission-id a1b2c3d4-… \
-  --embargo-date 2025-12-01T00:00:00
+  --embargo-date 2026-12-01T16:00:00Z
 
 # Combine run list update with metadata update
 endpoints-submission-cli submissions update \

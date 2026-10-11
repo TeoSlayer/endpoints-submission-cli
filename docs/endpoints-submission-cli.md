@@ -270,7 +270,7 @@ endpoints-submission-cli submissions create \
 | `--provisional` | no | Request provisional publication (default: false). Results become publicly viewable on the visualizer during the next cohort with a `peer review pending` disclaimer. Prompts for confirmation before submitting |
 | `--yes`, `-y` | no | Skip the `--provisional` confirmation prompt (for non-interactive use) |
 | `--target-availability-date DATE` | no | `YYYY-MM-DD`; required when availability is `preview` |
-| `--embargo-date DATETIME` | no | Embargo datetime in ISO 8601 format (e.g. `2025-12-01T00:00:00`) |
+| `--embargo-date DATETIME` | no | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. Must be in the future. |
 | `--dry-run` | no | Assemble folder, run checker, print layout — exit without submitting |
 
 **If the final status PATCH fails** the submission record and uploaded bundle still
@@ -308,7 +308,7 @@ endpoints-submission-cli submissions update \
 | `--token TOKEN` | API token |
 | `--run-ids RUN_ID` | Set the complete run UUID list. Repeatable — pass once per run. Runs not listed are removed. |
 | `--target-availability-date DATE` | Target availability date (`YYYY-MM-DD`) |
-| `--embargo-date DATETIME` | Embargo datetime in ISO 8601 format (e.g. `2025-12-01T00:00:00`) |
+| `--embargo-date DATETIME` | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. |
 
 **When `--run-ids` is provided** the command runs a full rebuild:
 
