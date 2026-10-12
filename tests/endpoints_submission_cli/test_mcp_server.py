@@ -93,6 +93,40 @@ class TestTextCommands:
         )
         assert mcp_server.pin_run("r-1") == {"output": "Run pinned: r-1"}
 
+    _NOTICE = (
+        "\nA new version of endpoints-submission-cli is available: 1.3.2.0 → 1.4.0.0"
+        "  (pip install --upgrade endpoints-submission-cli)\n"
+    )
+
+    def test_an_outdated_cli_is_reported(self, mocker) -> None:
+        mocker.patch(
+            "subprocess.run", return_value=_completed(0, stderr=f"Run pinned: r-1\n{self._NOTICE}")
+        )
+        mocker.patch(
+            "endpoints_submission_cli._version_check.outdated", return_value=("1.3.2.0", "1.4.0.0")
+        )
+        result = mcp_server.pin_run("r-1")
+        assert result["output"] == "Run pinned: r-1"
+        assert "runs endpoints-submission-cli 1.3.2.0; 1.4.0.0 is available" in result["upgrade"]
+        assert "rejects create_submission" in result["upgrade"]
+
+    def test_an_outdated_cli_is_reported_with_a_failure(self, mocker) -> None:
+        mocker.patch(
+            "subprocess.run",
+            return_value=_completed(
+                1, stderr=f"API error creating submission: too old\n{self._NOTICE}"
+            ),
+        )
+        mocker.patch(
+            "endpoints_submission_cli._version_check.outdated", return_value=("1.3.2.0", "1.4.0.0")
+        )
+        with pytest.raises(CliError) as info:
+            mcp_server.withdraw_submission("s-1")
+        message = str(info.value)
+        assert message.startswith("API error creating submission: too old")
+        assert "1.4.0.0 is available" in message
+        assert "A new version" not in message
+
     def test_commands_cannot_wait_on_a_prompt(self, mocker) -> None:
         run = mocker.patch("subprocess.run", return_value=_completed(0))
         mcp_server.withdraw_submission("s-1")
@@ -273,6 +307,18 @@ class TestServer:
 
         with pytest.raises(Exception, match="No API token provided"):
             anyio.run(call)
+
+    def test_instructions_report_an_outdated_cli(self, mocker) -> None:
+        mocker.patch(
+            "endpoints_submission_cli._version_check.outdated", return_value=("1.3.2.0", "1.4.0.0")
+        )
+        instructions = mcp_server.build_server().instructions or ""
+        assert instructions.startswith(mcp_server._INSTRUCTIONS)
+        assert "1.4.0.0 is available" in instructions
+
+    def test_instructions_are_unchanged_when_up_to_date(self, mocker) -> None:
+        mocker.patch("endpoints_submission_cli._version_check.outdated", return_value=None)
+        assert mcp_server.build_server().instructions == mcp_server._INSTRUCTIONS
 
     def test_missing_extra_is_explained(self, monkeypatch) -> None:
         monkeypatch.setitem(sys.modules, "mcp.server.mcpserver", None)
