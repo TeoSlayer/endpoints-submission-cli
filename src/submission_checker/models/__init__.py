@@ -27,7 +27,14 @@ from .file import (
     SystemDescription,
     SystemPower,
 )
-from .regions import MIN_DURATION_MS, RegionBounds, Regions, classify_concurrency, compute_regions
+from .regions import (
+    AGENTIC_MIN_DURATION_MS,
+    MIN_DURATION_MS,
+    RegionBounds,
+    Regions,
+    classify_concurrency,
+    compute_regions,
+)
 from .results import CheckResult, Report, Severity, err, ok, warn
 from .structure import ModelDir, SrcDir, SubmissionDir
 
@@ -37,6 +44,7 @@ __all__ = [
     "DatasetAccuracyScores",
     "DrafterBinding",
     "Division",
+    "AGENTIC_MIN_DURATION_MS",
     "MIN_DURATION_MS",
     "MIN_QUERY_COUNT",
     "ModelContext",

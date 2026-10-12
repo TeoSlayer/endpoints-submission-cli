@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from ..messages import Invalid
 
 __all__ = [
+    "AGENTIC_MIN_DURATION_MS",
     "MARGIN_SATISFIES_HIGH_CONCURRENCY",
     "MIN_DURATION_MS",
     "REGION_NAMES",
@@ -33,6 +34,7 @@ __all__ = [
     "classify_concurrency",
     "compute_regions",
     "covered_region",
+    "min_duration_ms",
 ]
 
 #: Upper bound of the Ultra Low Concurrency region (§5.4), fixed for all submissions.
@@ -92,7 +94,8 @@ class Regions:
     margin: RegionBounds
 
 
-#: Minimum steady-state duration per region (§6.2, illustrative — section is WIP).
+#: Minimum steady-state duration per region for non-agentic benchmarks (§6.2's
+#: Legacy LLM table; example values pending ratification).
 MIN_DURATION_MS: dict[str, int] = {
     "low_latency": 600_000,
     "low_concurrency": 1_200_000,
@@ -102,6 +105,30 @@ MIN_DURATION_MS: dict[str, int] = {
     # high region it extends.
     "margin": 1_200_000,
 }
+
+#: §6.2's table for agentic benchmarks: the same 600 s at Ultra Low Concurrency, and
+#: 2,400 s everywhere above it.
+AGENTIC_MIN_DURATION_MS: dict[str, int] = {
+    "low_latency": 600_000,
+    "low_concurrency": 2_400_000,
+    "med_concurrency": 2_400_000,
+    "high_concurrency": 2_400_000,
+    "margin": 2_400_000,
+}
+
+
+def min_duration_ms(region: str, concurrency: int, *, agentic: bool) -> int:
+    """§6.2's minimum steady-state duration for a point, in milliseconds.
+
+    Both §6.2 tables key their 600 s row to Ultra Low Concurrency as 1–32, not to the
+    computed ``low_latency`` band (1 to ``C_min``), so a point at or below
+    :data:`ULTRA_LOW_CONCURRENCY_MAX` takes it even when ``C_min`` is lower and the
+    point falls in Low Concurrency.
+    """
+    table = AGENTIC_MIN_DURATION_MS if agentic else MIN_DURATION_MS
+    if concurrency <= ULTRA_LOW_CONCURRENCY_MAX:
+        return table["low_latency"]
+    return table.get(region, 0)
 
 
 def compute_regions(c_max: int, c_min: int) -> Regions:

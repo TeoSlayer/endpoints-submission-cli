@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, PrivateAttr, ValidationInfo, model_v
 
 from ..file.point_config import OFFLINE_DEDICATED, PointConfig
 from ..file.point_summary import PointSummary
-from ..regions import MIN_DURATION_MS, classify_concurrency
+from ..regions import classify_concurrency, min_duration_ms
 from ..results import CheckResult, err, ok, warn
 
 _TPS_TOLERANCE = 0.01  # 1% relative tolerance for stored-vs-derived comparisons
@@ -52,6 +52,10 @@ class PointResult(BaseModel):
         point could clear §6.2 on time its official metrics never covered. Points
         reporting no window fall back to whole-run duration, which is the pre-1.0
         basis and what §4.4 calls the fallback result.
+
+        Agentic points take §6.2's agentic table (2,400 s above Ultra Low Concurrency).
+        The point's own load pattern decides; a curve whose points disagree is
+        reported by ``benchmark-type-consistency``.
         """
         regions = (info.context or {}).get("regions")
         summary_path: Path | None = (info.context or {}).get("summary_path")
@@ -61,7 +65,7 @@ class PointResult(BaseModel):
         region = classify_concurrency(c, regions)
         if region is None:
             return self  # already flagged by concurrency-in-range
-        min_ms = MIN_DURATION_MS.get(region, 0)
+        min_ms = min_duration_ms(region, c, agentic=self.config.is_agentic)
         duration_ms, basis = self._duration_basis()
         if duration_ms < min_ms:
             self._check_results.append(
