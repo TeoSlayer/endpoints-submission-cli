@@ -5,8 +5,67 @@ on:
     types: [published]
 
 jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      # A release must be newer than everything already published and every other
+      # release tag, and must be the only release tag on its commit: setuptools-scm
+      # picks one of several tags on a commit, so a stray older tag there gets built.
+      - name: Check the tag is a new, later version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          uv run --no-project --with packaging python - <<'PY'
+          import json, os, subprocess, sys
+          from urllib.request import urlopen
+          from packaging.version import InvalidVersion, Version
+
+          tag = os.environ["TAG"]
+          def fail(msg):
+              print(f"::error::{msg}")
+              sys.exit(1)
+          def parse(name):
+              try:
+                  return Version(name.removeprefix("v"))
+              except InvalidVersion:
+                  return None
+
+          version = parse(tag)
+          if not tag.startswith("v") or version is None:
+              fail(f"release tag {tag!r} is not v<version>")
+
+          with urlopen("https://pypi.org/pypi/endpoints-submission-cli/json", timeout=30) as r:
+              published = [v for v in map(Version, json.load(r)["releases"])]
+          if version in published:
+              fail(f"{version} is already on PyPI")
+          if published and version < max(published):
+              fail(f"{version} is older than {max(published)}, the latest on PyPI")
+
+          def git(*args):
+              return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout.split()
+          others = {t: parse(t) for t in git("tag", "--list", "v*") if t != tag}
+          newer = sorted(t for t, v in others.items() if v is not None and v > version)
+          if newer:
+              fail(f"{tag} is older than existing tags: {', '.join(newer)}")
+          shared = [t for t in git("tag", "--points-at", tag, "--list", "v*") if t != tag]
+          if shared:
+              fail(f"{tag}'s commit also carries {', '.join(shared)}; setuptools-scm may build that version instead. Delete the stray tag and re-run.")
+          print(f"{tag}: new, and later than PyPI ({max(published) if published else 'none'}) and every other tag")
+          PY
+
   build:
     name: Build distribution
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +82,19 @@ jobs:
 
       - name: Build sdist and wheel
         run: uv build
+
+      - name: Check the build has the tag's version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          expected="${TAG#v}"
+          ls dist/
+          for f in dist/*; do
+            case "$(basename "$f")" in
+              endpoints_submission_cli-"$expected"-*.whl|endpoints_submission_cli-"$expected".tar.gz) ;;
+              *) echo "::error::$f is not version $expected (tag $TAG)"; exit 1 ;;
+            esac
+          done
 
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v4
