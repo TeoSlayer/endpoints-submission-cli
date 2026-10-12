@@ -12,7 +12,7 @@ from typing import Any
 import click
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn
 
-from ..._version_check import UPGRADE_COMMAND, outdated
+from ..._version_check import REQUIRED_COMPONENTS, UPGRADE_COMMAND, outdated
 from ...exceptions import APIError, SubmissionBuildError, SubmissionCheckError
 from ...runs import api as runs_api
 from ...submissions import api as subs_api
@@ -160,14 +160,16 @@ def submissions_create(
     if provisional and not dry_run:
         _confirm_provisional(assume_yes)
     resolved_token = _get_token(token)
-    # The API rejects a submission from any CLI older than the latest release. Ask
-    # PyPI now rather than after the downloads and the checker; if PyPI can't be
-    # reached, carry on and leave the decision to the API.
-    if (versions := outdated(fresh=True)) is not None:
+    # The API rejects a submission from a CLI behind the latest release's
+    # major.minor. Ask PyPI now rather than after the downloads and the checker; if
+    # PyPI can't be reached, carry on and leave the decision to the API.
+    if (versions := outdated(fresh=True, components=REQUIRED_COMPONENTS)) is not None:
         current, latest = versions
+        required = ".".join(latest.split(".")[:REQUIRED_COMPONENTS])
         message = (
             f"endpoints-submission-cli {current} is out of date; creating a submission"
-            f" requires {latest}. Upgrade with: {UPGRADE_COMMAND}"
+            f" requires {required}.x or later (latest: {latest}). Upgrade with:"
+            f" {UPGRADE_COMMAND}"
         )
         if not dry_run:
             _console.print(f"[bold red]{message}[/bold red]")

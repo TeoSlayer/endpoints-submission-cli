@@ -59,9 +59,34 @@ class TestIsNewer:
     def test_not_newer(self, latest: str, current: str) -> None:
         assert not _version_check._is_newer(latest, current)
 
+    @pytest.mark.parametrize(
+        ("latest", "current", "newer"),
+        [
+            ("1.4.1.0", "1.4.0.0", False),
+            ("1.4.1.0", "1.4", False),
+            ("1.5.0.0", "1.4.9.9", True),
+            ("2.0.0.0", "1.9.0.0", True),
+        ],
+    )
+    def test_major_minor_only(self, latest: str, current: str, newer: bool) -> None:
+        assert _version_check._is_newer(latest, current, components=2) is newer
+
 
 @pytest.mark.unit
 class TestOutdated:
+    def test_patch_behind_is_outdated_but_not_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _installed(monkeypatch, "1.4.0.0")
+        _pypi(monkeypatch, "1.4.1.0")
+        assert _version_check.outdated() == ("1.4.0.0", "1.4.1.0")
+        assert _version_check.outdated(components=_version_check.REQUIRED_COMPONENTS) is None
+
+    def test_minor_behind_is_rejected(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _installed(monkeypatch, "1.3.2.0")
+        _pypi(monkeypatch, "1.4.1.0")
+        assert _version_check.outdated(components=2) == ("1.3.2.0", "1.4.1.0")
+
     def test_older_install_is_outdated(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _installed(monkeypatch, "1.3.2.0")
         _pypi(monkeypatch, "1.4.0.0")

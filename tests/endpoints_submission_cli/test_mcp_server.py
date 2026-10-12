@@ -110,6 +110,19 @@ class TestTextCommands:
         assert "runs endpoints-submission-cli 1.3.2.0; 1.4.0.0 is available" in result["upgrade"]
         assert "rejects create_submission" in result["upgrade"]
 
+    def test_a_patch_behind_cli_is_told_it_still_works(self, mocker) -> None:
+        mocker.patch(
+            "subprocess.run", return_value=_completed(0, stderr=f"Run pinned: r-1\n{self._NOTICE}")
+        )
+        mocker.patch(
+            "endpoints_submission_cli._version_check.outdated",
+            side_effect=lambda components=None: None if components else ("1.4.0.0", "1.4.1.0"),
+        )
+        upgrade = mcp_server.pin_run("r-1")["upgrade"]
+        assert "1.4.1.0 is available" in upgrade
+        assert "create_submission still works" in upgrade
+        assert "rejects" not in upgrade
+
     def test_an_outdated_cli_is_reported_with_a_failure(self, mocker) -> None:
         mocker.patch(
             "subprocess.run",

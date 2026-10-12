@@ -82,21 +82,31 @@ class CliError(RuntimeError):
 def _upgrade_message() -> str | None:
     """What to tell the user when this server's CLI is older than the latest release.
 
-    The API only accepts a submission from the latest release, so this is more than a
-    nicety: create_submission fails until the CLI is upgraded and the server restarted.
+    The API rejects a submission from a CLI behind the latest release's major.minor,
+    so then create_submission fails until the CLI is upgraded and the server
+    restarted. Behind only on patch level, the upgrade is recommended, not required.
     """
-    from ._version_check import outdated
+    from ._version_check import REQUIRED_COMPONENTS, outdated
 
     versions = outdated()
     if versions is None:
         return None
     current, latest = versions
-    return (
-        f"This server runs endpoints-submission-cli {current}; {latest} is available, and"
-        " the API rejects create_submission from any older version. Tell the user to"
-        " upgrade the CLI this server runs from (pip install --upgrade"
+    how = (
+        " the CLI this server runs from (pip install --upgrade"
         " 'endpoints-submission-cli[mcp]', or for uvx, add --refresh to the server"
         " command) and restart the server."
+    )
+    if outdated(components=REQUIRED_COMPONENTS) is not None:
+        return (
+            f"This server runs endpoints-submission-cli {current}; {latest} is available,"
+            " and the API rejects create_submission from this version. Tell the user to"
+            " upgrade" + how
+        )
+    return (
+        f"This server runs endpoints-submission-cli {current}; {latest} is available."
+        " create_submission still works from this version, but suggest the user"
+        " upgrade" + how
     )
 
 
