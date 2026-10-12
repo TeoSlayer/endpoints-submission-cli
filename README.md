@@ -288,7 +288,7 @@ Pareto point carries its own `system_desc.json`.
                     ├── system_desc.json      # §8.2 — per point since PR #119
                     ├── result_summary.json   # aggregate metrics
                     ├── accuracy_results.json # §6.6 accuracy results
-                    ├── config.yaml           # OPTIONAL as of v1.0
+                    ├── config.yaml           # benchmark configuration as run
                     └── server_configs/       # OPTIONAL, submitter-defined
 ```
 
@@ -310,6 +310,7 @@ submission root (§9.1).
 | `benchmark-model-dir` | §1 | At least one benchmark-model directory per system |
 | `point-dirs` | §1 | At least one `r<N>/` Pareto-point directory per model |
 | `measurement-points-present` | §1 | Every `r<N>/` carries a `point.yaml` |
+| `config-file-present` | §8.1 | Every `r<N>/` carries a `config.yaml` that is a YAML mapping |
 | `point-dirname-concurrency` | §1 | `r<N>/` name matches the declared concurrency (warn) |
 | `result-summary-present` | §1 | `result_summary.json` exists for each point |
 | `shared-path-resolution` | §9.1 | `shared_src` / `shared_docs` resolve under the submission root |

@@ -589,6 +589,17 @@ required-dir:
     fail:
       text: 'Missing required directory: {name}/{hint}'
       fix: Create {name}/ at the submission root, laid out as §8.1 describes.
+config-file-present:
+  title: Benchmark configuration present
+  spec: §8.1
+  messages:
+    fail:
+      text: Missing config.yaml in {relative_to}/
+      fix: Add the config.yaml the benchmark ran with (endpoints writes it to its report_dir) beside
+        point.yaml.
+    invalid:
+      text: 'config.yaml in {relative_to}/ is not a YAML mapping: {reason}'
+      fix: Ship the config.yaml exactly as endpoints wrote it.
 result-file-valid:
   title: Result summary (result_summary.json)
   spec: §8.3

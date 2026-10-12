@@ -779,6 +779,7 @@ class SubmissionChecker:
         unparsed: list[_UnparsedPoint] = []
 
         for point_dir in point_dirs:
+            results.extend(self._check_config_yaml(point_dir))
             yaml_path = point_dir / layout.POINT_YAML
             if not yaml_path.exists():
                 results.append(
@@ -1038,6 +1039,40 @@ class SubmissionChecker:
             )
             results.extend(point_power._check_results)
         return results
+
+    def _check_config_yaml(self, point_dir: Path) -> list[CheckResult]:
+        """``config.yaml`` must sit beside ``point.yaml`` and be a YAML mapping (§8.1).
+
+        It is the configuration the harness actually ran. No other rule reads it, so
+        presence and shape are all that is checked; point.yaml carries the disclosure.
+        """
+        config_path = point_dir / layout.CONFIG_YAML
+        relative_to = point_dir.relative_to(self.submission_path)
+        if not config_path.is_file():
+            return [_err("config-file-present", "fail", config_path, relative_to=relative_to)]
+        try:
+            data = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, UnicodeDecodeError) as exc:
+            return [
+                _err(
+                    "config-file-present",
+                    "invalid",
+                    config_path,
+                    relative_to=relative_to,
+                    reason=str(exc).splitlines()[0],
+                )
+            ]
+        if not isinstance(data, dict):
+            return [
+                _err(
+                    "config-file-present",
+                    "invalid",
+                    config_path,
+                    relative_to=relative_to,
+                    reason=f"expected a mapping, got {type(data).__name__}",
+                )
+            ]
+        return []
 
     def _check_unparsed_point(self, point: _UnparsedPoint) -> list[CheckResult]:
         """Check what can be checked for a point whose ``point.yaml`` is unusable.

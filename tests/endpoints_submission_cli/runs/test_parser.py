@@ -102,16 +102,16 @@ class TestParseRunFolder:
         with pytest.raises(RunFolderError, match="system_desc.json"):
             parse_run_folder(folder)
 
-    def test_missing_config_yaml_is_accepted(self, endpoints_run_folder: Path) -> None:
-        """config.yaml is optional as of v1.0; an absent one parses as an empty mapping.
-
-        It used to be required — the run-folder half of an asymmetry where config.yaml
-        was mandatory for a run while point.yaml was mandatory for a submission. v1.0
-        makes point.yaml the normative artifact in both places.
-        """
+    def test_missing_config_yaml_raises(self, endpoints_run_folder: Path) -> None:
+        """config.yaml is required beside point.yaml (§8.1)."""
         (endpoints_run_folder / "config.yaml").unlink()
-        payload = parse_run_folder(endpoints_run_folder)
-        assert payload["config"] == {}
+        with pytest.raises(RunFolderError, match="missing required file.*config.yaml"):
+            parse_run_folder(endpoints_run_folder)
+
+    def test_config_yaml_must_be_a_mapping(self, endpoints_run_folder: Path) -> None:
+        (endpoints_run_folder / "config.yaml").write_text("- not\n- a mapping\n")
+        with pytest.raises(RunFolderError, match="config.yaml must be a YAML mapping"):
+            parse_run_folder(endpoints_run_folder)
 
     def test_missing_result_summary_raises(self, tmp_path: Path) -> None:
         folder = tmp_path / "bad_run"
