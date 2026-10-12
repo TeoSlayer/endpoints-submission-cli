@@ -794,6 +794,67 @@ class TestSubmissionsCreate:
                 )
         assert result.exit_code == 1
 
+    _CREATE_ARGS = (
+        "submissions",
+        "create",
+        "--division",
+        "standardized",
+        "--scenario",
+        "cop",
+        "--availability",
+        "available",
+        "--run-ids",
+        RUN_ID,
+        *_TOKEN_ARGS,
+    )
+
+    def test_create_outdated_cli_exits_before_downloading(self) -> None:
+        """The API rejects an outdated CLI, so don't make the user wait for the checker."""
+        with (
+            patch(
+                "endpoints_submission_cli.commands.submissions.create.outdated",
+                return_value=("1.3.2.0", "1.4.0.0"),
+            ),
+            patch("endpoints_submission_cli.runs.api.download_run_archive") as mock_dl,
+            patch("endpoints_submission_cli.submissions.api.create_submission") as mock_create,
+        ):
+            result = _runner.invoke(app, list(self._CREATE_ARGS))
+        assert result.exit_code == 1
+        out = _flat(result.output)
+        assert "1.3.2.0 is out of date" in out
+        assert "requires 1.4.0.0" in out
+        assert "pip install --upgrade endpoints-submission-cli" in out
+        mock_dl.assert_not_called()
+        mock_create.assert_not_called()
+
+    def test_create_outdated_cli_asks_pypi_not_the_cache(self) -> None:
+        with (
+            patch(
+                "endpoints_submission_cli.commands.submissions.create.outdated", return_value=None
+            ) as mock_outdated,
+            patch(
+                "endpoints_submission_cli.runs.api.download_run_archive",
+                side_effect=APIError("not found"),
+            ),
+        ):
+            _runner.invoke(app, list(self._CREATE_ARGS))
+        mock_outdated.assert_called_once_with(fresh=True)
+
+    def test_create_outdated_cli_dry_run_warns_and_continues(self) -> None:
+        with (
+            patch(
+                "endpoints_submission_cli.commands.submissions.create.outdated",
+                return_value=("1.3.2.0", "1.4.0.0"),
+            ),
+            patch(
+                "endpoints_submission_cli.runs.api.download_run_archive",
+                side_effect=APIError("not found"),
+            ) as mock_dl,
+        ):
+            result = _runner.invoke(app, [*self._CREATE_ARGS, "--dry-run"])
+        assert "continuing: this is a dry run" in _flat(result.output)
+        mock_dl.assert_called_once()
+
     def test_create_checker_failure_exits_1(self, tmp_path: Path) -> None:
 
         fake_archive = _make_fake_archive(tmp_path)

@@ -10,12 +10,16 @@ Usage::
 The check never blocks the CLI: if the cache is stale a daemon thread fetches
 the latest version from PyPI while the command runs, then an atexit handler
 prints a one-line notice (to stderr) if a newer release exists.
+
+:func:`outdated` answers the same question synchronously, for callers that need it
+before doing anything: the API only accepts a submission from the latest release.
 """
 
 from __future__ import annotations
 
 import atexit
 import json
+import re
 import threading
 import time
 from importlib.metadata import PackageNotFoundError
@@ -23,7 +27,7 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from urllib.request import urlopen
 
-__all__ = ["register_upgrade_notice"]
+__all__ = ["UPGRADE_COMMAND", "outdated", "register_upgrade_notice"]
 
 _registered = False
 
@@ -32,6 +36,8 @@ _PYPI_URL = f"https://pypi.org/pypi/{_PACKAGE}/json"
 _CACHE_PATH = Path.home() / ".cache" / _PACKAGE / "version_check.json"
 _CACHE_TTL = 24 * 3600  # seconds
 _TIMEOUT = 3.0  # PyPI request timeout
+
+UPGRADE_COMMAND = f"pip install --upgrade {_PACKAGE}"
 
 
 def _current_version() -> str | None:
@@ -65,14 +71,36 @@ def _fetch_latest() -> str | None:
         return None
 
 
-def _is_newer(latest: str, current: str) -> bool:
-    def _parts(v: str) -> tuple[int, ...]:
-        try:
-            return tuple(int(x) for x in v.split(".")[:3])
-        except ValueError:
-            return (0,)
+def _release(v: str) -> tuple[int, ...]:
+    """The numeric release part of *v*, zero-padded: ``1.4.1.dev3+g12ab`` → (1, 4, 1, 0)."""
+    match = re.match(r"\d+(?:\.\d+)*", v)
+    if not match:
+        return (0,)
+    parts = tuple(int(x) for x in match.group().split("."))
+    return parts + (0,) * (4 - len(parts))
 
-    return _parts(latest) > _parts(current)
+
+def _is_newer(latest: str, current: str) -> bool:
+    # Every release component counts: releases are four-part (1.4.0.0), and the API
+    # rejects a client one fourth-part release behind.
+    return _release(latest) > _release(current)
+
+
+def outdated(*, fresh: bool = False) -> tuple[str, str] | None:
+    """``(current, latest)`` if a newer release than the installed CLI is on PyPI.
+
+    *fresh* skips the 24-hour cache and asks PyPI, falling back to the cache if PyPI
+    can't be reached. ``None`` when up to date or when neither source has an answer.
+    """
+    current = _current_version()
+    if not current:
+        return None
+    latest = None if fresh else _cached_latest()
+    if latest is None:
+        latest = _fetch_latest() or _cached_latest()
+    if latest and _is_newer(latest, current):
+        return current, latest
+    return None
 
 
 def register_upgrade_notice() -> None:
@@ -112,7 +140,7 @@ def register_upgrade_notice() -> None:
             Console(stderr=True).print(
                 f"\n[dim]A new version of [bold]{_PACKAGE}[/bold] is available: "
                 f"[yellow]{current}[/yellow] → [green]{fetched}[/green]  "
-                f"([bold]pip install --upgrade {_PACKAGE}[/bold])[/dim]"
+                f"([bold]{UPGRADE_COMMAND}[/bold])[/dim]"
             )
 
     atexit.register(_on_exit)

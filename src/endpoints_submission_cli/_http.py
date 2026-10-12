@@ -65,6 +65,14 @@ def _headers(token: str) -> dict[str, str]:
 def _raise_status(exc: httpx.HTTPStatusError) -> NoReturn:
     if exc.response.status_code in (401, 403):
         raise AuthError(f"Authentication failed (HTTP {exc.response.status_code})") from exc
+    if exc.response.status_code == 426:
+        # The API only accepts some requests from the latest CLI release; its detail
+        # names the release and the upgrade command, so show just that.
+        try:
+            detail = exc.response.json()["detail"]
+        except (ValueError, KeyError, TypeError):
+            detail = exc.response.text[:500]
+        raise APIError(str(detail)) from exc
     body = exc.response.text[:500]  # truncate to avoid dumping full HTML/JSON error pages into logs
     raise APIError(f"API error {exc.response.status_code}: {body}") from exc
 

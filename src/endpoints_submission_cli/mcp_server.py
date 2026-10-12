@@ -57,7 +57,8 @@ __all__ = [
 #: assembles the bundle, runs the checker and uploads it, so this is generous.
 _TIMEOUT_S = 900
 
-#: The upgrade notice the CLI prints to stderr on exit. It is not part of any answer.
+#: The upgrade notice the CLI prints to stderr on exit. It is not part of a command's
+#: answer, so it is taken out and reported on its own (see :func:`_upgrade_message`).
 _UPGRADE_NOTICE = "A new version of endpoints-submission-cli is available"
 
 _INSTRUCTIONS = """\
@@ -78,15 +79,37 @@ class CliError(RuntimeError):
     """The CLI failed, with its own error message."""
 
 
-def _clean(text: str) -> str:
-    """*text* without the upgrade notice, which is about the CLI, not the command."""
+def _upgrade_message() -> str | None:
+    """What to tell the user when this server's CLI is older than the latest release.
+
+    The API only accepts a submission from the latest release, so this is more than a
+    nicety: create_submission fails until the CLI is upgraded and the server restarted.
+    """
+    from ._version_check import outdated
+
+    versions = outdated()
+    if versions is None:
+        return None
+    current, latest = versions
+    return (
+        f"This server runs endpoints-submission-cli {current}; {latest} is available, and"
+        " the API rejects create_submission from any older version. Tell the user to"
+        " upgrade the CLI this server runs from (pip install --upgrade"
+        " 'endpoints-submission-cli[mcp]', or for uvx, add --refresh to the server"
+        " command) and restart the server."
+    )
+
+
+def _clean(text: str) -> tuple[str, bool]:
+    """*text* without the CLI's upgrade notice, and whether the notice was there.
+
+    The notice is printed at exit, so it and everything after it are dropped.
+    """
     lines = text.splitlines()
     for index, line in enumerate(lines):
         if _UPGRADE_NOTICE in line:
-            # The notice is two lines: the announcement and the pip command.
-            del lines[index : index + 2]
-            break
-    return "\n".join(lines).strip()
+            return "\n".join(lines[:index]).strip(), True
+    return text.strip(), False
 
 
 def _run(args: list[str], ok_codes: tuple[int, ...]) -> subprocess.CompletedProcess[str]:
@@ -110,8 +133,11 @@ def _run(args: list[str], ok_codes: tuple[int, ...]) -> subprocess.CompletedProc
     except subprocess.TimeoutExpired as exc:
         raise CliError(f"endpoints-submission-cli timed out after {_TIMEOUT_S}s") from exc
     if done.returncode not in ok_codes:
-        message = _clean(f"{done.stdout}\n{done.stderr}")
-        raise CliError(message or f"endpoints-submission-cli exited {done.returncode}")
+        message, notice = _clean(f"{done.stdout}\n{done.stderr}")
+        message = message or f"endpoints-submission-cli exited {done.returncode}"
+        if notice and (upgrade := _upgrade_message()):
+            message = f"{message}\n\n{upgrade}"
+        raise CliError(message)
     return done
 
 
@@ -128,10 +154,14 @@ def _run_text(*args: str) -> dict[str, str]:
     """Run a command with no ``--json`` mode and return what it reported.
 
     These commands report on both streams — the result on stdout, status on stderr —
-    so both are returned, in that order.
+    so both are returned, in that order. If the CLI is out of date, ``upgrade`` says so.
     """
     done = _run(list(args), (0,))
-    return {"output": _clean(f"{done.stdout}\n{done.stderr}")}
+    output, notice = _clean(f"{done.stdout}\n{done.stderr}")
+    result = {"output": output}
+    if notice and (upgrade := _upgrade_message()):
+        result["upgrade"] = upgrade
+    return result
 
 
 def _repeat(flag: str, values: list[str] | None) -> list[str]:
@@ -494,7 +524,10 @@ def build_server() -> MCPServer:
         (delete_run, annotations(read_only=False, remote=True, destructive=True)),
     ]
 
-    server = MCPServer("endpoints-submission-cli", instructions=_INSTRUCTIONS)
+    # Checked once, at startup: the client reads the instructions when it connects.
+    upgrade = _upgrade_message()
+    instructions = f"{_INSTRUCTIONS}\n\n{upgrade}" if upgrade else _INSTRUCTIONS
+    server = MCPServer("endpoints-submission-cli", instructions=instructions)
     for fn, hints in tools:
         server.tool(annotations=hints)(reported(fn))
     return server
