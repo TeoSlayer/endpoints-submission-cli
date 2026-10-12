@@ -203,7 +203,7 @@ Submission created: a1b2c3d4-e5f6-7890-abcd-ef1234567890
                     ├── system_desc.json       # §8.2 — per point since policies PR #119
                     ├── result_summary.json    # aggregate metrics (QPS, TPS, TTFT, TPOT)
                     ├── accuracy_results.json  # §6.6
-                    ├── config.yaml            # OPTIONAL as of v1.0
+                    ├── config.yaml            # benchmark configuration as run
                     └── server_configs/        # OPTIONAL, point-specific backend configs
 ```
 

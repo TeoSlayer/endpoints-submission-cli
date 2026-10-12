@@ -257,7 +257,8 @@ def _load_run_data(
     point.yaml is required, not derived. The §8.3 disclosure it carries cannot be
     reconstructed from config.yaml for every harness, and guessing produced bundles
     the checker rejected — so the submitter supplies it and the builder copies it.
-    That also makes it the natural anchor now that config.yaml is optional (v1.0).
+    config.yaml is required beside it (§8.1) and is copied into the point directory
+    with the run's other files.
     """
     # Archives may contain a top-level directory wrapper; use point.yaml as anchor.
     candidates = list(run_dir.rglob(layout.POINT_YAML))
@@ -279,12 +280,14 @@ def _load_run_data(
     point_bytes = point_path.read_bytes()
     point_config: dict[str, Any] = yaml.safe_load(point_bytes) or {}
 
-    # config.yaml records what the harness was told to do. Optional as of v1.0: it
-    # carries no disclosure of its own, so a run without one is still complete.
+    # config.yaml is the configuration the harness ran, required beside point.yaml (§8.1).
     config_path = base / layout.CONFIG_YAML
-    config: dict[str, Any] = (
-        (yaml.safe_load(config_path.read_text()) or {}) if config_path.exists() else {}
-    )
+    if not config_path.is_file():
+        raise SubmissionBuildError(
+            f"Run {run_id}: archive is missing {layout.CONFIG_YAML}, which §8.1 requires"
+            f" beside {layout.POINT_YAML}. endpoints writes it to every report_dir."
+        )
+    config: dict[str, Any] = yaml.safe_load(config_path.read_text()) or {}
     result_summary: dict[str, Any] = json.loads(summary_path.read_text())
 
     system_info = _load_system_desc(base, run_id, division, availability, target_availability_date)
@@ -451,8 +454,8 @@ def _extract_model(config: dict[str, Any], point_config: dict[str, Any]) -> str:
 
     point.yaml wins. §8.1 names the directory ``results/<system>/<model_name>/``, and
     §8.3 defines ``model_name`` — so the disclosure is the authoritative source and
-    config.yaml, which is optional as of v1.0, is only a fallback. Preferring the
-    optional file put a name in the tree that §8.1 does not define (config.yaml carries
+    config.yaml is only a fallback. Preferring config.yaml put a name in the tree that
+    §8.1 does not define (config.yaml carries
     a HuggingFace path, giving ``Llama-3_1-8B-Instruct`` where the checker asks for
     ``llama3_1-8b``).
 
@@ -504,7 +507,7 @@ def _extract_run_type(config: dict[str, Any], point_config: dict[str, Any], run_
 
     When neither source answers, the run type is **unknown and not guessed**. Defaulting
     to "performance" was silently wrong in the one case that matters: an accuracy run
-    shipped without a config.yaml would be filed as the performance run for its
+    whose config.yaml does not say would be filed as the performance run for its
     concurrency, so the real performance run at that concurrency would collide with it
     and the accuracy results would never reach ``accuracy_results.json``. A submission
     that loses a measurement is worse than one that fails to build.
@@ -532,8 +535,8 @@ def _extract_run_type(config: dict[str, Any], point_config: dict[str, Any], run_
     raise SubmissionBuildError(
         f"Run {run_id}: cannot tell whether this is an accuracy or a performance run."
         f" config.yaml does not declare datasets[].type and {detail}."
-        " Ship a config.yaml with the run, or set dataset_type to exactly 'Accuracy' or"
-        " 'Performance' in point.yaml."
+        " Declare datasets[].type in config.yaml, or set dataset_type to exactly"
+        " 'Accuracy' or 'Performance' in point.yaml."
     )
 
 

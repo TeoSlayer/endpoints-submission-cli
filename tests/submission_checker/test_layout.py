@@ -96,9 +96,9 @@ class TestResolveSharedPath:
 
 
 class TestRequiredRunFiles:
-    def test_config_yaml_is_not_required(self) -> None:
-        """config.yaml became optional in v1.0; point.yaml carries the disclosure."""
-        assert layout.CONFIG_YAML not in layout.REQUIRED_RUN_FILES
+    def test_config_yaml_is_required_beside_point_yaml(self) -> None:
+        """§8.1 puts config.yaml back beside point.yaml."""
+        assert layout.CONFIG_YAML in layout.REQUIRED_RUN_FILES
         assert layout.POINT_YAML in layout.REQUIRED_RUN_FILES
 
     def test_system_desc_is_required_per_run(self) -> None:

@@ -955,42 +955,55 @@ class TestRunTypeResolution:
         with pytest.raises(SubmissionBuildError, match="run-042"):
             _extract_run_type({}, {}, "run-042")
 
-    def test_build_succeeds_without_config_when_point_declares_the_type(
-        self, run_folder: Path, tmp_path: Path
-    ) -> None:
+    @staticmethod
+    def _archive(run_folder: Path, tmp_path: Path, *, config, point_type) -> Path:
+        """Archive a copy of *run_folder* with *config* (None: no config.yaml) and
+        point.yaml's dataset_type set to *point_type* (None: removed)."""
         import shutil
 
         folder = tmp_path / "run"
         shutil.copytree(run_folder, folder)
-        (folder / "config.yaml").unlink()
+        if config is None:
+            (folder / "config.yaml").unlink()
+        else:
+            (folder / "config.yaml").write_text(yaml.dump(config))
         point = yaml.safe_load((folder / "point.yaml").read_text())
-        point["dataset_type"] = "Performance"
+        point.pop("dataset_type", None)
+        if point_type is not None:
+            point["dataset_type"] = point_type
         (folder / "point.yaml").write_text(yaml.dump(point))
         archive = tmp_path / "run.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
             tar.add(folder, arcname="run")
+        return archive
 
+    def test_build_succeeds_when_only_point_declares_the_type(
+        self, run_folder: Path, tmp_path: Path
+    ) -> None:
+        archive = self._archive(
+            run_folder, tmp_path, config={"model_params": {"name": "m"}}, point_type="Performance"
+        )
         sub_dir = build_submission_folder(
             [("run-001", archive)], "standardized", "available", tmp_path / "sub"
         )
-        assert list(sub_dir.rglob("point.yaml"))
+        (point_yaml,) = sub_dir.rglob("point.yaml")
+        # config.yaml is shipped beside point.yaml (§8.1).
+        assert (point_yaml.parent / "config.yaml").is_file()
 
     def test_build_fails_when_neither_source_declares_the_type(
         self, run_folder: Path, tmp_path: Path
     ) -> None:
-        import shutil
-
-        folder = tmp_path / "run"
-        shutil.copytree(run_folder, folder)
-        (folder / "config.yaml").unlink()
-        point = yaml.safe_load((folder / "point.yaml").read_text())
-        point.pop("dataset_type", None)
-        (folder / "point.yaml").write_text(yaml.dump(point))
-        archive = tmp_path / "run.tar.gz"
-        with tarfile.open(archive, "w:gz") as tar:
-            tar.add(folder, arcname="run")
-
+        archive = self._archive(
+            run_folder, tmp_path, config={"model_params": {"name": "m"}}, point_type=None
+        )
         with pytest.raises(SubmissionBuildError, match="accuracy or a performance run"):
+            build_submission_folder(
+                [("run-001", archive)], "standardized", "available", tmp_path / "sub"
+            )
+
+    def test_build_fails_without_config_yaml(self, run_folder: Path, tmp_path: Path) -> None:
+        archive = self._archive(run_folder, tmp_path, config=None, point_type="Performance")
+        with pytest.raises(SubmissionBuildError, match="missing config.yaml"):
             build_submission_folder(
                 [("run-001", archive)], "standardized", "available", tmp_path / "sub"
             )

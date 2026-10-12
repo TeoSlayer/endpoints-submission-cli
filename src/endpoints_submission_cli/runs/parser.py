@@ -14,7 +14,7 @@ Run folder layout, as written by ``mlcommons/endpoints`` to its ``report_dir``
                                               also submitter-authored; required for
                                               Standardized at submission time
         performance/result_summary.json     — performance metrics                 [required]
-        config.yaml                         — resolved benchmark configuration    [optional]
+        config.yaml                         — resolved benchmark configuration    [required]
         accuracy/accuracy_results.json      — per-dataset accuracy scores
         events.jsonl                        — per-event log (largest file by far)
         report.txt                          — human-readable report
@@ -54,12 +54,13 @@ __all__ = ["parse_run_folder", "build_archive"]
 #: carries (warmup counts, data source, stream_all_chunks) is not always present in a
 #: config, and inventing nulls for it produced bundles the checker then rejected.
 #:
-#: config.yaml is *not* required as of v1.0. It records what the harness was told to do,
-#: which is useful context but carries no disclosure of its own — point.yaml is the
-#: normative artifact. It is still copied through whenever a run supplies it.
+#: config.yaml is required beside point.yaml (§8.1): it is the configuration the
+#: harness actually ran, which point.yaml summarizes but does not replace. endpoints
+#: writes it to every report_dir.
 _REQUIRED_FILES = (
     "system_desc.json",
     "point.yaml",
+    "config.yaml",
     "performance/result_summary.json",
 )
 
@@ -74,9 +75,8 @@ def parse_run_folder(path: Path) -> dict[str, Any]:
     """Parse *path* and return a dict suitable for ``POST /runs``.
 
     Args:
-        path: Directory containing ``system_desc.json``, ``point.yaml``, and
-              ``performance/result_summary.json``. ``config.yaml`` is optional and
-              passed through as an empty mapping when absent.
+        path: Directory containing ``system_desc.json``, ``point.yaml``,
+              ``config.yaml`` and ``performance/result_summary.json``.
 
     Returns:
         Dict with keys matching ``RunCreate`` schema fields. ``point_config`` is
@@ -94,8 +94,7 @@ def parse_run_folder(path: Path) -> dict[str, Any]:
     _validate_required_files(path)
 
     system_info = _load_json(path / "system_desc.json")
-    config_path = path / "config.yaml"
-    config = _load_yaml(config_path) if config_path.exists() else {}
+    config = _load_yaml(path / "config.yaml")
     result_summary = _load_json(path / _RESULT_SUMMARY_REL)
     point_config = _load_yaml(path / "point.yaml")
 

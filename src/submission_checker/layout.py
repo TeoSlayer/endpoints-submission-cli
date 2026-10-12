@@ -15,6 +15,7 @@ Layout as of `mlcommons/endpoints_policies` PR #119 (`feat/remove_runtime_meta.j
         docs/
         results/<system>/<model_name>/r<N>/
             point.yaml
+            config.yaml
             result_summary.json
             accuracy_results.json
             system_desc.json
@@ -68,7 +69,8 @@ RESULT_SUMMARY_JSON = "result_summary.json"
 ACCURACY_RESULTS_JSON = "accuracy_results.json"
 #: Raw per-request log. Not in §8.1's tree, but shipped and read for accuracy scores.
 RESULTS_JSON = "results.json"
-#: Benchmark configuration. Optional as of v1.0 — shipped when the run supplies it.
+#: The loadgen configuration the harness ran (endpoints' resolved BenchmarkConfig).
+#: Required beside point.yaml in every point directory (§8.1, policies PR #146).
 CONFIG_YAML = "config.yaml"
 #: §4.5.2 provisioned-power descriptor. Per *system* — the only such file in §8.1's
 #: tree, which policies PR #119 had otherwise emptied of per-system files.
@@ -91,7 +93,7 @@ ACCURACY_SUBDIR = "accuracy"
 DOCUMENTATION_SUBDIR = "documentation"
 
 #: Files a run folder must contain for `runs create` to accept it.
-REQUIRED_RUN_FILES = (SYSTEM_DESC_JSON, POINT_YAML, RESULT_SUMMARY_JSON)
+REQUIRED_RUN_FILES = (SYSTEM_DESC_JSON, POINT_YAML, CONFIG_YAML, RESULT_SUMMARY_JSON)
 
 # ── Benchmark-model directories ───────────────────────────────────────────────
 

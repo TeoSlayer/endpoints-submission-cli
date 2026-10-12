@@ -73,7 +73,7 @@ A run flagged `--test` shows as `Test Run │ Yes` in `runs get`. It is **not** 
 ├── system_power.json                 # §4.5.2 power descriptor (Standardized; submitter-authored)
 ├── performance/result_summary.json   # Performance metrics (required)
 ├── accuracy/accuracy_results.json    # Per-dataset accuracy scores
-├── config.yaml                       # Resolved benchmark configuration (optional as of v1.0)
+├── config.yaml                       # Resolved benchmark configuration (required)
 ├── events.jsonl                      # Per-event log (largest file by far)
 ├── report.txt                        # Human-readable report
 ├── sample_idx_map.json               # Sample index mapping
@@ -97,22 +97,24 @@ exists when the performance phase ran, `accuracy/` when the accuracy phase ran, 
 layouts that put `result_summary.json` at the top level are not accepted by
 `runs create`.
 
-`point.yaml` is the required one: it is the §8.3 disclosure the Submission Checker
+`point.yaml` is the §8.3 disclosure the Submission Checker
 validates (seeds, warmup counts, data source, region, model and dataset metadata), and it
 is copied into the bundle verbatim — the CLI does not derive it from `config.yaml` and
 does not fill in missing fields, so whatever the harness emits is what gets submitted.
 
-`config.yaml` became **optional** in v1.0. It records what the harness was told to do and
-carries no disclosure of its own; it is still copied through whenever a run supplies it.
+`config.yaml` is **required** beside `point.yaml` (§8.1). It is the configuration the
+harness actually ran — endpoints writes it to every `report_dir` — and is shipped in the
+point's `r<N>/` directory unchanged. `runs create`, the bundle builder and the checker
+(`config-file-present`) all reject a point without one.
 The builder needs to know whether a run is an accuracy or a performance run, and it
 will not guess. It reads `datasets[].type` from `config.yaml` first, then falls back to
 point.yaml's §8.3 `dataset_type` when that is exactly `Accuracy` or `Performance`. If
-neither answers — no `config.yaml` and no `dataset_type`, or a `dataset_type` of
+neither answers — no `datasets[].type` and no `dataset_type`, or a `dataset_type` of
 `Accuracy + Performance`, which describes the dataset rather than this run — the build
 fails with a message naming the run.
 
 That is deliberate. Defaulting to "performance" was silently destructive: an accuracy
-run shipped without a `config.yaml` would be filed as its concurrency's performance run,
+run whose `config.yaml` did not say would be filed as its concurrency's performance run,
 collide with the real one, and drop its accuracy results from the bundle.
 
 **Rollback behaviour:** if the archive upload fails after the run record has been created, the CLI automatically deletes the run record to leave a clean state. If that delete also fails, the orphaned run ID is printed so it can be cleaned up manually.

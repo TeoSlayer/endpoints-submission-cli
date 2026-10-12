@@ -420,7 +420,7 @@ submission record.
 │                                     #   ^ both authored by the submitter, not by endpoints
 ├── performance/result_summary.json   # Performance metrics (required)
 ├── accuracy/accuracy_results.json    # Per-dataset accuracy scores
-├── config.yaml                       # Resolved benchmark configuration (optional as of v1.0)
+├── config.yaml                       # Resolved benchmark configuration (required)
 ├── events.jsonl                      # Per-event log (largest file by far)
 ├── report.txt                        # Human-readable report
 ├── sample_idx_map.json               # Sample index mapping
@@ -533,8 +533,8 @@ warmup:
 The CLI does **not** derive this from `config.yaml`. It used to, which silently produced
 nulls for any disclosure field a harness did not happen to put in its config — and the
 checker then rejected the bundle. `point.yaml` is now required and passed through
-untouched, so the harness owns the disclosure. `config.yaml` became **optional** in
-v1.0: it records what the harness was told to do and carries no disclosure of its own.
+untouched, so the harness owns the disclosure. `config.yaml` is **required** beside it
+(§8.1): the configuration the harness actually ran, shipped in `r<N>/` unchanged.
 
 The one exception is `shared_src` / `shared_docs`. The builder fills these in when a
 run does not declare them, because their referent — `src/<implementation>/`, the union
@@ -585,7 +585,7 @@ registered:
                     ├── system_desc.json       # §8.2 — per point since policies PR #119
                     ├── result_summary.json    # aggregate metrics (QPS, TPS, TTFT, TPOT)
                     ├── accuracy_results.json  # §6.6
-                    ├── config.yaml            # OPTIONAL as of v1.0
+                    ├── config.yaml            # benchmark configuration as run
                     └── server_configs/        # OPTIONAL, point-specific backend configs
 ```
 

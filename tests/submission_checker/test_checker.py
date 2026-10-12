@@ -547,12 +547,26 @@ class TestCheckerEdgeCases:
         report = _check(root)
         assert _errors(report, "tps-utilization")
 
-    def test_missing_config_yaml_is_not_an_error(self, tmp_path):
-        """config.yaml is optional as of v1.0 — point.yaml carries the disclosure."""
+    def test_missing_config_yaml(self, tmp_path):
+        """config-file-present error for every r<N>/ without a config.yaml (§8.1)."""
         root = _build_submission(tmp_path, write_config_yaml=False)
         report = _check(root)
-        assert not [r for r in report.errors if "config.yaml" in r.message]
+        errors = _errors(report, "config-file-present")
+        assert errors
+        assert all("Missing config.yaml in results/" in r.message for r in errors)
+        # The rest of the point is still checked.
         assert not _errors(report, "result-summary-present")
+
+    def test_config_yaml_present_is_not_an_error(self, tmp_path):
+        root = _build_submission(tmp_path)
+        assert not _errors(_check(root), "config-file-present")
+
+    def test_config_yaml_must_be_a_mapping(self, tmp_path):
+        root = _build_submission(tmp_path)
+        (bad,) = list(root.rglob("config.yaml"))[:1]
+        bad.write_text("- just\n- a list\n")
+        errors = _errors(_check(root), "config-file-present")
+        assert [r for r in errors if "not a YAML mapping" in r.message]
 
     def test_invalid_result_log(self, tmp_path):
         """result-file-valid error when the result log JSON is malformed."""
