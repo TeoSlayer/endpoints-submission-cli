@@ -66,7 +66,7 @@ _pydantic:
     enum: must be {expected}, got {input}
 accuracy-coverage:
   title: Accuracy at the mandatory points
-  spec: §5.3
+  spec: §4.3, §5.3
   messages:
     pass: Accuracy present in all four mandatory bands ({accuracy_by_point_count} point(s) carry results;
       §5.3 N={value})
@@ -78,6 +78,11 @@ accuracy-coverage:
     missing-bands:
       text: 'No accuracy results at a point in: {bands}'
       fix: 'Run accuracy at one point in each of: {bands}.'
+    extra-results:
+      text: 'Accuracy results at {listed} fill no mandatory point: §4.3 allows exactly one per mandatory
+        band and none at a submitter''s-choice point (N={value} in all), and one result cannot fill
+        two bands'
+      fix: Keep exactly one accuracy result per mandatory band and remove the rest.
 accuracy-gate:
   title: Accuracy gate
   spec: §15
@@ -331,6 +336,7 @@ metric-consistency-tpot-p90:
     fail: No TPOT P90 reported (result_summary.json has no tpot.percentiles['90']); tps_per_user is defined
       as 1000 / tpot_p90_ms and has no other source
     fail-2: Reported TPOT P90 is {p90}, which is not finite and strictly positive
+    exempt: Dedicated Offline run; TPOT P90 not required (§5.7.1 latency metrics do not apply, §6.5)
 metric-consistency-tps-per-kw:
   title: Metric consistency TPS per kW
   spec: §4.5.3

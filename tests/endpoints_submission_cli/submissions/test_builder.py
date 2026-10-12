@@ -1206,6 +1206,9 @@ class TestBuilderCheckerContract:
     #: The top point sits at C_max so it can be elected as the Offline result
     #: (§5.7.2 Option 2), which keeps the §5.3 minimum at 7 points.
     _COMPLIANT_CURVE = (16, 20, 88, 256, 512, 768, 1024)
+    #: The points that carry no accuracy run: 256 is the mandatory High point and the
+    #: elected 1024 the Offline result, so these two are submitter's choice (§4.3).
+    _SUBMITTERS_CHOICE = (512, 768)
 
     def _curve_archive(
         self, run_folder: Path, tmp_path: Path, concurrency: int, system_tps: float
@@ -1248,6 +1251,10 @@ class TestBuilderCheckerContract:
         results = json.loads((folder / "results.json").read_text())
         for entry in results["accuracy_scores"].values():
             entry["num_samples"] = 13368
+        # §4.3 fixes accuracy at exactly N=5 points — one per mandatory band plus the
+        # Offline result — and none at a submitter's-choice point.
+        if concurrency in self._SUBMITTERS_CHOICE:
+            del results["accuracy_scores"]
         (folder / "results.json").write_text(json.dumps(results))
 
         summary = json.loads((folder / "result_summary.json").read_text())

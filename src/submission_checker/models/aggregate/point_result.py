@@ -9,7 +9,7 @@ __all__ = ["MIN_QUERY_COUNT", "PointResult"]
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr, ValidationInfo, model_validator
 
-from ..file.point_config import PointConfig
+from ..file.point_config import OFFLINE_DEDICATED, PointConfig
 from ..file.point_summary import PointSummary
 from ..regions import MIN_DURATION_MS, classify_concurrency
 from ..results import CheckResult, err, ok, warn
@@ -287,7 +287,16 @@ class PointResult(BaseModel):
         with a finite, strictly positive P90". A checker reading only the summary can
         never see the distribution, so what is actually verifiable is the *reported*
         percentile — the message says so rather than implying the samples were audited.
+
+        A **dedicated** Offline run is exempt. §5.7.1: "Throughput is the only metric of
+        interest" and "Latency metrics do not apply"; §6.5 exempts it from streaming
+        "since it reports only ``system_tps``", so it has no TPOT to report. An elected
+        point is not exempt — §5.7.2 keeps its latency metrics "defined and reported as
+        for any other fixed-concurrency point".
         """
+        if self.config.offline == OFFLINE_DEDICATED:
+            self._check_results.append(ok("metric-consistency-tpot-p90", "exempt", path))
+            return
         p90 = s.tpot_p90_ms
         if p90 is None:
             self._check_results.append(err("metric-consistency-tpot-p90", "fail", path))
@@ -306,7 +315,13 @@ class PointResult(BaseModel):
 
         If the result log stores a ``tps_per_user`` field, it is verified against the
         derived value within ``_TPS_TOLERANCE``.
+
+        Not applied to a dedicated Offline run, for the reason given in
+        :meth:`_check_tpot_p90`: a per-user rate is a latency metric §5.7.1 says does
+        not apply to it.
         """
+        if self.config.offline == OFFLINE_DEDICATED:
+            return
         p90 = s.tpot_p90_ms
         if p90 is None or not math.isfinite(p90) or p90 <= 0:
             return  # already reported by metric-consistency-tpot-p90

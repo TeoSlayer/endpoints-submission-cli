@@ -42,6 +42,9 @@ What it does, per submission tree:
     systems of 4 to 72 accelerators, which engages one of them. A point that is not
     maximally engaged is given one tensor-parallel replica per node — ``TP`` the node's
     accelerators, ``DP`` its node count — which keeps names like ``sys_gaudi_dp2`` true.
+11. **Exactly ``N`` accuracy results** (§4.3, §5.3). v0.7 ran accuracy at most points;
+    v1.0 allows one per mandatory band plus the Offline point and none at a
+    submitter's-choice point, so the surplus ``accuracy_results.json`` files are removed.
 
 Run with ``uv run python tests/tools/regenerate_fixtures.py``; ``--check`` exits 1 if
 anything would change, which is what the idempotence test asserts.
@@ -62,6 +65,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from submission_checker import layout  # noqa: E402
 from submission_checker.accuracy_targets import get_thresholds  # noqa: E402
+from submission_checker.models.aggregate.context import (  # noqa: E402
+    accuracy_bands,
+    match_accuracy_bands,
+)
+from submission_checker.models.regions import (  # noqa: E402
+    ULTRA_LOW_CONCURRENCY_MAX,
+    compute_regions,
+)
 from submission_checker.seed_sets import load_seed_sets  # noqa: E402
 
 FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "test_submissions"
@@ -231,6 +242,8 @@ def _regenerate_curve(
         changes += _write_point_yaml(point_dir, concurrency, base_desc, seed_set, dry_run=dry_run)
 
         changes += _modernise_accuracy(point_dir, model_dir.name, dry_run=dry_run)
+
+    changes += _prune_accuracy(point_dirs, base_desc, dry_run=dry_run)
     return changes
 
 
@@ -267,6 +280,55 @@ def _modernise_accuracy(point_dir: Path, model: str, *, dry_run: bool) -> list[s
         if legacy.get(key) is not None:
             entry[key] = legacy[key]
     return _write_json(path, {dataset: entry}, dry_run=dry_run)
+
+
+def _prune_accuracy(point_dirs: list[Path], desc: dict[str, Any], *, dry_run: bool) -> list[str]:
+    """Keep exactly one accuracy result per mandatory point (§4.3, §5.3).
+
+    v0.7 ran accuracy at most points of a curve; v1.0 fixes the count at ``N`` — one
+    per mandatory band plus the Offline point — and rejects a result at a
+    submitter's-choice point. The results kept are the ones the checker's own
+    matching assigns to a band, plus the Offline point's; every other
+    ``accuracy_results.json`` is deleted. A curve the checker cannot compute regions
+    for is left alone.
+    """
+    c_max = desc.get("max_supported_concurrency")
+    concurrencies = {d: layout.parse_point_dir(d.name) or 0 for d in point_dirs}
+    if not isinstance(c_max, int) or c_max <= ULTRA_LOW_CONCURRENCY_MAX or not concurrencies:
+        return []
+    c_min = min(min(concurrencies.values()), ULTRA_LOW_CONCURRENCY_MAX)
+    if c_min < 1:
+        return []
+    regions = compute_regions(c_max, c_min)
+
+    offline: dict[Path, str | None] = {}
+    for d in point_dirs:
+        point = (
+            yaml.safe_load((d / layout.POINT_YAML).read_text())
+            if (d / layout.POINT_YAML).exists()
+            else None
+        )
+        offline[d] = point.get("offline") if isinstance(point, dict) else None
+
+    carrying = [d for d in point_dirs if (d / layout.ACCURACY_RESULTS_JSON).exists()]
+    candidates = sorted(
+        (
+            (concurrencies[d], accuracy_bands(concurrencies[d], regions), offline[d] == "elected")
+            for d in carrying
+            if offline[d] != "dedicated"
+        ),
+        key=lambda item: item[2],
+    )
+    keep = set(match_accuracy_bands(candidates).values())
+    changes: list[str] = []
+    for d in carrying:
+        if offline[d] in ("dedicated", "elected") or concurrencies[d] in keep:
+            continue
+        path = d / layout.ACCURACY_RESULTS_JSON
+        changes.append(f"delete {_rel(path)}")
+        if not dry_run:
+            path.unlink()
+    return changes
 
 
 def _reference_value(lower: float, upper: float | None) -> float:
