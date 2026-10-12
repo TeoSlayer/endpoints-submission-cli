@@ -16,6 +16,7 @@ from submission_checker.models import (
     RegionPlacement,
     RuntimeSettings,
     Severity,
+    compute_regions,
 )
 
 from .conftest import (
@@ -104,6 +105,46 @@ class TestRunDurationValidator:
         )
         # run-duration should not appear because concurrency is out of range
         assert not any(r.rule == "point-duration" for r in run_result._check_results)
+
+    @staticmethod
+    def _duration(tmp_path, config, seconds, regions=_REGIONS):
+        run_result = PointResult.model_validate(
+            {
+                "config": config,
+                "summary": _summary(duration_ns=seconds * 1e9),
+                "yaml_path": tmp_path / "point.yaml",
+            },
+            context={"regions": regions, "summary_path": tmp_path / "summary.json"},
+        )
+        return [r for r in run_result._check_results if r.rule == "point-duration"]
+
+    @pytest.mark.parametrize(
+        ("lp_type", "seconds", "warns"),
+        [
+            ("concurrency", 1_200, False),
+            ("concurrency", 1_199, True),
+            ("agentic_inference", 2_400, False),
+            ("agentic_inference", 2_399, True),
+            ("agentic_inference", 1_200, True),
+        ],
+    )
+    def test_agentic_points_take_the_agentic_table(self, tmp_path, lp_type, seconds, warns):
+        """§6.2: agentic benchmarks need 2,400 s above Ultra Low Concurrency, not 1,200 s."""
+        results = self._duration(tmp_path, _config(concurrency=64, lp_type=lp_type), seconds)
+        assert (results[0].severity == Severity.WARNING) is warns
+
+    @pytest.mark.parametrize("lp_type", ["concurrency", "agentic_inference"])
+    def test_ultra_low_is_one_to_32_whatever_c_min(self, tmp_path, lp_type):
+        """§6.2 keys its 600 s row to concurrency 1–32, so a point above C_min but at or
+        below 32 takes it even though it falls outside the computed low-latency band."""
+        regions = compute_regions(1024, 16)
+        assert not regions.low_latency.contains(32)
+        results = self._duration(tmp_path, _config(concurrency=32, lp_type=lp_type), 600, regions)
+        assert results[0].severity != Severity.WARNING
+
+    def test_duration_cites_section_6_2(self, tmp_path):
+        results = self._duration(tmp_path, _config(concurrency=64), 100)
+        assert results[0].spec_ref == "§6.2"
 
     def test_no_regions_skips(self, tmp_path):
         config = _config(concurrency=64)

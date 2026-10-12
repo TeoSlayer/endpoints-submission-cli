@@ -472,7 +472,7 @@ not satisfy High Concurrency coverage.
 | `point-disclosure-complete` | §8.3 | Every required §8.3 disclosure field is present |
 | `load-pattern` | §6.1 | `load_pattern` is `concurrency` or `agentic_inference`, with a positive level |
 | `streaming-config` | §6.5 | Reports client IPC chunk forwarding; either flag value is accepted and neither proves server streaming |
-| `point-duration` | §6.2 | Steady-state window's issue-time span meets the region minimum (warn) |
+| `point-duration` | §6.2 | Steady-state window's issue-time span meets the region minimum: 600 s at concurrency ≤ 32, otherwise 1,200 s, or 2,400 s for agentic (warn) |
 | `steady-state-valid` | §4.4 | `status`, `verdict` and gating `state` use the spec's vocabulary |
 | `steady-state-consistency` | §4.4 | The reported status agrees with the window it describes |
 | `steady-state-basis` | §4.4 | Which basis supplies the official result; flags fallbacks and drift (warn) |
