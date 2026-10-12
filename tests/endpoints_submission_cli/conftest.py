@@ -51,8 +51,10 @@ _SYSTEM_DESC = {
     "submitter_org_names": "TestOrg",
     "submitter_contact": "test@testorg.com",
     "system_name": "Test System",
+    "shortened_system_name": "Test System",
     "system_category": "datacenter",
     "system_availability_status": "Available",
+    "availability_url": "https://example.com/test-system",
     "max_supported_concurrency": 1024,
     "serving_framework": "vllm==0.4.2",
     "node_types": [

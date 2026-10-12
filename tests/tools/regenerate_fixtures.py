@@ -12,8 +12,11 @@ What it does, per submission tree:
    ``results/<system>/system_desc_id.json`` is folded into every ``r<N>/`` together
    with the §8.2 fields absorbed from that point's ``run_metadata.json``; both source
    files are then deleted.
-2. **§8.2 renames.** ``system_availability_status`` → ``publication_status``; the flat
-   node-level ``accelerator_*`` fields → ``accelerator_info[]``.
+2. **§8.2 renames.** ``publication_status`` → ``system_availability_status``; the flat
+   node-level ``accelerator_*`` fields → ``accelerator_info[]``. The §8.2 conditional
+   fields are filled where missing: ``availability_url`` for an Available system,
+   ``target_availability_date`` for a Preview one, and a ``shortened_system_name`` of at
+   most 20 characters.
 3. **``tps_utilization`` recomputed** per Pareto curve as ``system_tps / max(system_tps)``
    with ``system_tps`` derived from ``result_summary.json``, so the stored value agrees
    with the measurement the checker recomputes it from.
@@ -113,6 +116,19 @@ _ACCELERATOR_FIELDS = (
 _LIQUID_COOLED_ACCELERATORS = ("GB300", "TPU")
 _AIR_COOLED = "Air-cooled"
 _LIQUID_COOLED = "Liquid-cooled"
+
+#: §8.2 conditional fields for a synthetic system that lacks them: an Available
+#: system's ``availability_url``, a Preview system's ``target_availability_date``.
+_AVAILABILITY_URL = "https://example.com/systems"
+_TARGET_AVAILABILITY_DATE = "2027-01-01"
+#: §8.2 caps ``shortened_system_name`` at 20 characters.
+_SHORTENED_SYSTEM_NAME_MAX = 20
+
+
+def _shortened_name(name: object) -> str:
+    """§8.2 ``shortened_system_name``: the name, cut to 20 characters if longer."""
+    return str(name or "system")[:_SHORTENED_SYSTEM_NAME_MAX]
+
 
 #: Stale filenames from the pre-``r<N>`` layout, deleted wherever they appear.
 _STALE_GLOBS = ("results_summary.json", "point_*.yaml", "run_metadata.json")
@@ -428,10 +444,18 @@ def _system_description_for(system_dir: Path, legacy_path: Path) -> dict[str, An
 def _modernise_system_desc(desc: dict[str, Any]) -> dict[str, Any]:
     """Apply the §8.2 renames to a system description."""
     out = dict(desc)
-    for legacy in ("system_availability_status", "availability_status"):
+    for legacy in ("publication_status", "availability_status"):
         value = out.pop(legacy, None)
-        if value is not None and "publication_status" not in out:
-            out["publication_status"] = value
+        if value is not None and "system_availability_status" not in out:
+            out["system_availability_status"] = value
+    status = str(out.get("system_availability_status") or "").strip().lower()
+    if status == "available" and not out.get("availability_url"):
+        out["availability_url"] = _AVAILABILITY_URL
+    if status == "preview" and not out.get("target_availability_date"):
+        out["target_availability_date"] = _TARGET_AVAILABILITY_DATE
+    shortened = out.get("shortened_system_name")
+    if not shortened or len(shortened) > _SHORTENED_SYSTEM_NAME_MAX:
+        out["shortened_system_name"] = _shortened_name(shortened or out.get("system_name"))
     out["node_types"] = [_modernise_node(n) for n in out.get("node_types") or []]
     if not out.get("cooling") and not any(
         isinstance(n, dict) and n.get("cooling") for n in out["node_types"]

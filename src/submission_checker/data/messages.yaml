@@ -746,8 +746,21 @@ system-description-valid:
     availability-unknown: unknown availability {value!r}; must be one of available, preview, rdi
     availability-conflict:
       text: the availability fields disagree ({values})
-      fix: publication_status, system_availability_status and availability_status are spellings of
-        one field; give one, or make them agree.
+      fix: publication_status and availability_status are legacy spellings of §8.2's
+        system_availability_status; give that one only, or make them agree.
+    availability-url-missing:
+      text: system_availability_status is Available but availability_url is missing
+      fix: Add availability_url, the URL of a public product or ordering page for the system (§8.2).
+    availability-date-missing:
+      text: system_availability_status is Preview but target_availability_date is missing
+      fix: Add target_availability_date, the expected availability date as YYYY-MM-DD (§8.2).
+    availability-date-invalid: target_availability_date {value!r} is not an ISO 8601 date (YYYY-MM-DD)
+    shortened-name-empty:
+      text: shortened_system_name is empty
+      fix: Give shortened_system_name, a shortened system_name of at most 20 characters (§8.2).
+    shortened-name-too-long:
+      text: shortened_system_name {value!r} is {length} characters; §8.2 allows at most {limit}
+      fix: Shorten shortened_system_name to {limit} characters or fewer.
 system-results-dir:
   title: System results directory
   spec: §1

@@ -16,6 +16,7 @@ from submission_checker.models import (
     Report,
     RuntimeSettings,
     Severity,
+    SystemAvailabilityStatus,
     SystemDescription,
 )
 
@@ -110,8 +111,10 @@ _BASE_FLAT = {
     "submitter_org_names": "Test Org",
     "submitter_contact": "contact@example.com",
     "system_name": "test-node",
+    "shortened_system_name": "test-node",
     "system_category": "datacenter",
     "system_availability_status": "Available",
+    "availability_url": "https://example.com/test-node",
     "max_supported_concurrency": 1024,
     "system_size": "1 node",
     "system_node_ensemble_count": 1,
@@ -160,6 +163,8 @@ def test_node_requires_core_or_vcpu_count():
     "field",
     [
         "system_name",
+        "shortened_system_name",
+        "system_availability_status",
         "system_size",
         "system_node_ensemble_count",
         "system_node_ensemble_total",
@@ -233,6 +238,85 @@ def test_system_description_allows_extra_fields():
 def test_system_description_rejects_invalid_division():
     with pytest.raises(ValidationError):
         SystemDescription(**{**_BASE_FLAT, "division": "NotADivision"})
+
+
+def test_system_availability_status_is_the_section_8_2_field():
+    """§8.2 names it system_availability_status, and that is what the model dumps."""
+    dumped = SystemDescription(**_BASE_FLAT).model_dump(mode="json")
+    assert dumped["system_availability_status"] == "Available"
+    assert "publication_status" not in dumped
+
+
+@pytest.mark.parametrize("legacy", ["publication_status", "availability_status"])
+def test_legacy_availability_spellings_fold_into_system_availability_status(legacy):
+    payload = {k: v for k, v in _BASE_FLAT.items() if k != "system_availability_status"}
+    sd = SystemDescription(**{**payload, legacy: "available"})
+    assert sd.system_availability_status == SystemAvailabilityStatus.AVAILABLE
+
+
+def test_conflicting_availability_spellings_rejected():
+    with pytest.raises(ValidationError, match="disagree"):
+        SystemDescription(**{**_BASE_FLAT, "publication_status": "Preview"})
+
+
+@pytest.mark.parametrize("url", [None, ""])
+def test_available_requires_availability_url(url):
+    """§8.2: availability_url is required when the system is Available."""
+    with pytest.raises(ValidationError, match="availability_url"):
+        SystemDescription(**{**_BASE_FLAT, "availability_url": url})
+
+
+@pytest.mark.parametrize("status", ["Preview", "RDI"])
+def test_availability_url_not_required_unless_available(status):
+    payload = {
+        **_BASE_FLAT,
+        "system_availability_status": status,
+        "availability_url": None,
+        "target_availability_date": "2027-03-31",
+    }
+    assert SystemDescription(**payload).availability_url is None
+
+
+@pytest.mark.parametrize("date", [None, ""])
+def test_preview_requires_target_availability_date(date):
+    """§8.2: target_availability_date is required when the system is Preview."""
+    payload = {**_BASE_FLAT, "system_availability_status": "Preview"}
+    with pytest.raises(ValidationError, match="target_availability_date"):
+        SystemDescription(**{**payload, "target_availability_date": date})
+
+
+def test_preview_with_target_availability_date_valid():
+    payload = {
+        **_BASE_FLAT,
+        "system_availability_status": "Preview",
+        "target_availability_date": "2027-03-31",
+    }
+    assert SystemDescription(**payload).target_availability_date == "2027-03-31"
+
+
+@pytest.mark.parametrize("date", ["2027-13-01", "2027-02-30", "31/03/2027", "2027-3-31", "soon"])
+def test_target_availability_date_must_be_an_iso_8601_date(date):
+    payload = {
+        **_BASE_FLAT,
+        "system_availability_status": "Preview",
+        "target_availability_date": date,
+    }
+    with pytest.raises(ValidationError, match="ISO 8601"):
+        SystemDescription(**payload)
+
+
+@pytest.mark.parametrize("name", ["x", "a" * 20])
+def test_shortened_system_name_up_to_20_characters_valid(name):
+    assert SystemDescription(**{**_BASE_FLAT, "shortened_system_name": name})
+
+
+@pytest.mark.parametrize(
+    ("name", "match"), [("a" * 21, "at most 20"), ("", "empty"), ("  ", "empty")]
+)
+def test_shortened_system_name_rejected(name, match):
+    """§8.2: shortened_system_name is at most 20 characters."""
+    with pytest.raises(ValidationError, match=match):
+        SystemDescription(**{**_BASE_FLAT, "shortened_system_name": name})
 
 
 # ---------------------------------------------------------------------------

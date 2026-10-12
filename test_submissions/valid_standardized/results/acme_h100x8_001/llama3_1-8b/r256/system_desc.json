@@ -49,7 +49,6 @@
   "system_node_ensemble_count": 1,
   "system_node_ensemble_total": 1,
   "model_name": "llama3.1-8b",
-  "publication_status": "Available",
   "node_config": "8x H100 test node",
   "config_summary": {
     "disaggregated": null,
@@ -59,5 +58,8 @@
     "data_parallel": 1,
     "batch": null
   },
+  "system_availability_status": "Available",
+  "availability_url": "https://example.com/systems",
+  "shortened_system_name": "ACME H100x8 Node",
   "tps_utilization": 0.869565
 }
