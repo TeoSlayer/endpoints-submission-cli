@@ -822,7 +822,7 @@ class TestSubmissionsCreate:
         assert result.exit_code == 1
         out = _flat(result.output)
         assert "1.3.2.0 is out of date" in out
-        assert "requires 1.4.0.0" in out
+        assert "requires 1.4.x or later (latest: 1.4.0.0)" in out
         assert "pip install --upgrade endpoints-submission-cli" in out
         mock_dl.assert_not_called()
         mock_create.assert_not_called()
@@ -838,7 +838,8 @@ class TestSubmissionsCreate:
             ),
         ):
             _runner.invoke(app, list(self._CREATE_ARGS))
-        mock_outdated.assert_called_once_with(fresh=True)
+        # Fresh from PyPI, and only major.minor counts, as in the API.
+        mock_outdated.assert_called_once_with(fresh=True, components=2)
 
     def test_create_outdated_cli_dry_run_warns_and_continues(self) -> None:
         with (

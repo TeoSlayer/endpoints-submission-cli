@@ -27,7 +27,7 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from urllib.request import urlopen
 
-__all__ = ["UPGRADE_COMMAND", "outdated", "register_upgrade_notice"]
+__all__ = ["REQUIRED_COMPONENTS", "UPGRADE_COMMAND", "outdated", "register_upgrade_notice"]
 
 _registered = False
 
@@ -38,6 +38,11 @@ _CACHE_TTL = 24 * 3600  # seconds
 _TIMEOUT = 3.0  # PyPI request timeout
 
 UPGRADE_COMMAND = f"pip install --upgrade {_PACKAGE}"
+
+#: How many leading release numbers the API requires to match the latest release
+#: before it accepts a submission: for now, major.minor (1.4.0.0 passes while
+#: 1.4.1.0 is the latest). Keep in step with REQUIRED_COMPONENTS in the API.
+REQUIRED_COMPONENTS = 2
 
 
 def _current_version() -> str | None:
@@ -80,17 +85,19 @@ def _release(v: str) -> tuple[int, ...]:
     return parts + (0,) * (4 - len(parts))
 
 
-def _is_newer(latest: str, current: str) -> bool:
-    # Every release component counts: releases are four-part (1.4.0.0), and the API
-    # rejects a client one fourth-part release behind.
-    return _release(latest) > _release(current)
+def _is_newer(latest: str, current: str, components: int | None = None) -> bool:
+    # Releases are four-part (1.4.0.0), so by default every part counts; *components*
+    # compares only the leading ones.
+    return _release(latest)[:components] > _release(current)[:components]
 
 
-def outdated(*, fresh: bool = False) -> tuple[str, str] | None:
+def outdated(*, fresh: bool = False, components: int | None = None) -> tuple[str, str] | None:
     """``(current, latest)`` if a newer release than the installed CLI is on PyPI.
 
-    *fresh* skips the 24-hour cache and asks PyPI, falling back to the cache if PyPI
-    can't be reached. ``None`` when up to date or when neither source has an answer.
+    *components* compares only that many leading release numbers, e.g.
+    REQUIRED_COMPONENTS for "would the API reject this CLI". *fresh* skips the
+    24-hour cache and asks PyPI, falling back to the cache if PyPI can't be
+    reached. ``None`` when up to date or when neither source has an answer.
     """
     current = _current_version()
     if not current:
@@ -98,7 +105,7 @@ def outdated(*, fresh: bool = False) -> tuple[str, str] | None:
     latest = None if fresh else _cached_latest()
     if latest is None:
         latest = _fetch_latest() or _cached_latest()
-    if latest and _is_newer(latest, current):
+    if latest and _is_newer(latest, current, components):
         return current, latest
     return None
 
