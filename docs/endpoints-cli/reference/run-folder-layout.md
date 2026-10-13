@@ -31,6 +31,14 @@ Phase directories are created only for the phases that ran:
 | `--accuracy-only` | no | yes |
 | `--mode both` | yes | yes |
 
+An agentic benchmark run with inline accuracy (`accuracy_config.eval_method:
+agentic_inference_inline` on the performance dataset) also writes `accuracy/accuracy_results.json`
+in `--mode perf`, with one `dataset_type: performance` entry: the point's inline accuracy. The
+checker requires it at every point of an agentic curve (`agentic-accuracy-inline`), so keep it in
+every run folder; it is not an accuracy run for `accuracy-coverage`. When a point's accuracy comes from
+a separate `--accuracy-only` run, which has no inline score, `submissions create` adds the performance
+run's inline entry to that run's `accuracy_results.json`.
+
 ## Sizes
 
 From a 60 s, 16-concurrency run issuing 1,200 samples:

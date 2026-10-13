@@ -162,6 +162,11 @@ class ModelContext(BaseModel):
         return [c.concurrency for _, c in self.valid_points] + self.unparsed_concurrencies
 
     @property
+    def _accuracy_points(self) -> set[int]:
+        """Points whose accuracy results include an accuracy run, not only the inline score."""
+        return {c for c, result in self.accuracy_by_point.items() if result.accuracy_datasets()}
+
+    @property
     def offline_points(self) -> list[tuple[Path, PointConfig]]:
         """Points carrying an Offline declaration (§5.7)."""
         return [(path, c) for path, c in self.valid_points if c.is_offline]
@@ -589,7 +594,8 @@ class ModelContext(BaseModel):
         elected = {c.concurrency for _, c in self.valid_points if c.offline == OFFLINE_ELECTED}
         candidates: list[tuple[int, list[str], bool]] = []
         for concurrency in sorted(set(self._present_concurrencies)):
-            if concurrency not in self.accuracy_by_point or concurrency in dedicated:
+            # An inline-only result is the performance run's score, not an accuracy run.
+            if concurrency not in self._accuracy_points or concurrency in dedicated:
                 continue
             bands = accuracy_bands(concurrency, self.regions)
             candidates.append((concurrency, bands, concurrency in elected))
@@ -658,13 +664,13 @@ class ModelContext(BaseModel):
                     "accuracy-coverage",
                     "pass",
                     self.points_dir,
-                    accuracy_by_point_count=len(self.accuracy_by_point),
+                    accuracy_by_point_count=len(self._accuracy_points),
                     value=n,
                 )
             )
 
         for _path, config in self.offline_points:
-            if config.concurrency in self.accuracy_by_point:
+            if config.concurrency in self._accuracy_points:
                 self._check_results.append(
                     ok(
                         "accuracy-coverage",
@@ -741,25 +747,30 @@ class ModelContext(BaseModel):
         return self
 
     def _gate_agentic_inline(self, targets: AgenticTargets) -> None:
-        """Inline accuracy, at each point that reports it.
+        """Inline accuracy, at every submitted point.
 
-        "Every … submitted Pareto point must satisfy" applies to the results submitted.
-        Points without one are skipped; that one result per mandatory region exists is
-        ``accuracy-coverage``'s check.
+        "Every … submitted Pareto point must satisfy all of the model-specific accuracy
+        thresholds", and inline accuracy is one of them. Unlike SWE-bench, which runs once
+        per mandatory region (``accuracy-coverage``), the client scores inline accuracy on
+        every performance run, so each point's accuracy results must carry it; a point
+        without one cannot be shown to clear, and is an error.
 
         Read from the entry scored on the performance run, which the client names
         ``performance`` rather than after the performance dataset.
         """
         assert targets.inline_min is not None
-        seen = False
-        for concurrency in sorted(self.accuracy_by_point):
-            dataset = self.accuracy_by_point[concurrency].performance_dataset()
-            if dataset is None:
+        missing: list[int] = []
+        # A point whose point.yaml did not parse is already an error, so only parsed points.
+        for concurrency in sorted({config.concurrency for _, config in self.valid_points}):
+            result = self.accuracy_by_point.get(concurrency)
+            dataset = result.performance_dataset() if result is not None else None
+            # No inline entry, or one the client wrote with `score: null` (no turn scored).
+            if result is None or dataset is None or not result.metric_scores().get(dataset):
+                missing.append(concurrency)
                 continue
             score = self._dataset_score(concurrency, dataset, "agentic-accuracy-inline")
             if score is None:
-                continue
-            seen = True
+                continue  # _dataset_score reported the malformed score
             if score < targets.inline_min:
                 self._check_results.append(
                     err(
@@ -783,12 +794,13 @@ class ModelContext(BaseModel):
                         inline_min=targets.inline_min,
                     )
                 )
-        if not seen:
+        if missing:
             self._check_results.append(
-                warn(
+                err(
                     "agentic-accuracy-inline",
-                    "warn",
+                    "missing",
                     self.points_dir,
+                    listed=", ".join(f"r{c}" for c in missing),
                     performance_dataset_type=PERFORMANCE_DATASET_TYPE,
                 )
             )

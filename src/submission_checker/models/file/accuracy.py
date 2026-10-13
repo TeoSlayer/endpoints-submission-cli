@@ -111,6 +111,16 @@ class AccuracyResult(RootModel[dict[str, dict[str, Any]]]):
             return PERFORMANCE_DATASET_TYPE
         return None
 
+    def accuracy_datasets(self) -> list[str]:
+        """Names of the accuracy results: every entry but the inline score.
+
+        The inline entry (:meth:`performance_dataset`) is the performance run's own
+        score, which the client writes at every point. The other entries are accuracy
+        runs, of which §4.3 allows one per mandatory region (``accuracy-coverage``).
+        """
+        inline = self.performance_dataset()
+        return [name for name in self.root if name != inline]
+
     #: Per-entry bookkeeping keys that are not accuracy metrics.
     _META_KEYS = frozenset(
         {

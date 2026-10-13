@@ -40,6 +40,7 @@ from pydantic import ValidationError
 
 from submission_checker import layout
 from submission_checker.models.file import SystemDescription
+from submission_checker.models.file.accuracy import PERFORMANCE_DATASET_TYPE
 
 from ..exceptions import SubmissionBuildError
 from ..truncation import truncate_responses
@@ -623,13 +624,14 @@ def _write_point_dirs(
         _write_point_system_desc(point_dir, primary, max_tps)
 
         _write_point_extra_files(point_dir, primary, max_tps)
-        # A `--mode both` run is filed as performance but also carries accuracy/; use it
-        # when no separate accuracy run exists. Its top-level results.json is the
-        # performance request log, so only accuracy/ counts.
-        if accuracy_run is None and _carries_accuracy(primary):
-            accuracy_run = primary
         if accuracy_run is not None:
-            _write_accuracy_results(point_dir, accuracy_run)
+            _write_accuracy_results(
+                point_dir, accuracy_run, inline_from=runs_by_type.get("performance")
+            )
+        elif _carries_accuracy(primary):
+            # A `--mode both` run is filed as performance but also carries accuracy/. Its
+            # top-level results.json is the performance request log, so only accuracy/ counts.
+            _write_accuracy_results(point_dir, primary)
 
 
 def _carries_accuracy(run: dict[str, Any]) -> bool:
@@ -780,13 +782,19 @@ def _write_point_extra_files(
         dest.write_bytes(content)
 
 
-def _write_accuracy_results(point_dir: Path, accuracy_run: dict[str, Any]) -> None:
+def _write_accuracy_results(
+    point_dir: Path, accuracy_run: dict[str, Any], *, inline_from: dict[str, Any] | None = None
+) -> None:
     """Write ``accuracy_results.json`` for a point from its accuracy run.
 
     endpoints writes ``accuracy/accuracy_results.json``; older archives carry
     ``accuracy/results.json``, or ``accuracy_scores`` embedded in the run's own
     ``results.json``. All three are read so a bundle can still be assembled from runs
     uploaded before the layout settled.
+
+    *inline_from* is the point's performance run when a separate accuracy run supplies
+    the file. The checker gates an agentic benchmark's inline accuracy at every point,
+    and a ``--mode acc`` run has no inline score, so the performance run's is added.
     """
     extras = accuracy_run.get("_extra_files", {})
     content = (
@@ -796,7 +804,44 @@ def _write_accuracy_results(point_dir: Path, accuracy_run: dict[str, Any]) -> No
     )
     if content is None:
         return
-    (point_dir / "accuracy_results.json").write_bytes(truncate_responses(content))
+    content = truncate_responses(content)
+    if inline_from is not None:
+        # Only the performance run's accuracy/ phase: its top-level results.json is the
+        # performance request log.
+        donor = inline_from.get("_extra_files", {}).get(
+            f"{layout.ACCURACY_SUBDIR}/{layout.ACCURACY_RESULTS_JSON}"
+        )
+        content = _with_inline_entry(content, donor)
+    (point_dir / "accuracy_results.json").write_bytes(content)
+
+
+def _is_inline(entry: object) -> bool:
+    """Whether a native accuracy entry is the inline score of the performance run."""
+    return isinstance(entry, dict) and entry.get("dataset_type") == PERFORMANCE_DATASET_TYPE
+
+
+def _with_inline_entry(content: bytes, donor: bytes | None) -> bytes:
+    """*content* with *donor*'s inline accuracy entry added, when it has none of its own.
+
+    Both are the client's native report, ``{"accuracy_scores": [entry, ...]}``. Any other
+    shape, or a name already taken, leaves *content* as is.
+    """
+    if donor is None:
+        return content
+    try:
+        target, source = json.loads(content), json.loads(donor)
+    except ValueError:
+        return content
+    have = target.get("accuracy_scores") if isinstance(target, dict) else None
+    give = source.get("accuracy_scores") if isinstance(source, dict) else None
+    if not isinstance(have, list) or not isinstance(give, list) or any(map(_is_inline, have)):
+        return content
+    inline = next(filter(_is_inline, give), None)
+    taken = {entry.get("dataset_name") for entry in have if isinstance(entry, dict)}
+    if inline is None or inline.get("dataset_name") in taken:
+        return content
+    have.append(inline)
+    return json.dumps(target, indent=2).encode()
 
 
 def _write_documentation(
