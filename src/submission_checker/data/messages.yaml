@@ -554,6 +554,14 @@ power-estimated:
   spec: §4.5.2
   messages:
     warn: 'MLC Estimated Power: {estimates} — Appendix D values reach provisioned_power_kw'
+c-min-override:
+  title: C_min override
+  spec: §5.4
+  messages:
+    invalid: 'c_min_override must be a JSON integer in [1,32], got {value!r}'
+    missing-declaration: Every point on a curve must declare the same c_min_override or all must omit it
+    inconsistent: 'Conflicting c_min_override declarations on this curve: {values}'
+    missing-point: 'c_min_override = {c_min} must match a submitted concurrency point on this curve'
 region-basis:
   title: Region boundaries (C_min)
   spec: §5.4
@@ -565,6 +573,7 @@ region-basis:
     warn-2: C_min = {c_min}{clamped} derived from {concurrencies_count} of {point_dir_count} points{note}
       — the rest have no readable concurrency
     pass: C_min = {c_min}{clamped} derived from all {point_dir_count} points{note}
+    override: C_min = {c_min} declared by c_min_override; Ultra Low Concurrency spans 1–{c_min}
 region-computation:
   title: Region boundaries
   spec: §5.5

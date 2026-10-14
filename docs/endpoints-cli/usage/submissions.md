@@ -91,6 +91,14 @@ endpoints-submission-cli submissions create \
 | `--embargo-date DATETIME` | no | Embargo datetime, ISO 8601 with a time zone, e.g. `2026-12-01T16:00:00Z` (UTC) or `2026-12-01T08:00:00-08:00` (Pacific). A time without one is rejected. Must be in the future. Nothing is published before it. It can be moved later with `submissions update` but not added, so declare it here. |
 | `--dry-run` | no | Assemble folder and run checker, then print the folder layout and exit without creating the submission or PR. |
 
+To override the lower concurrency boundary, include `"c_min_override": 32` (for example)
+in each performance point's `system_desc.json` before registering the runs. Use the same
+integer from 1 through 32 for every point on a system/model curve, and include a point
+at that concurrency. The builder preserves the declaration; separate accuracy donors do
+not replace a performance point's metadata. Omit the field everywhere to retain default
+C_min derivation and Ultra Low Concurrency coverage of 1–32. With an override, that region
+ends at C_min and any point within it may supply its required accuracy result.
+
 The publication mode (Submission Rules §6.2) follows from `--provisional` and `--embargo-date`, and is fixed once the submission is created:
 
 | `--provisional` | `--embargo-date` | Mode |

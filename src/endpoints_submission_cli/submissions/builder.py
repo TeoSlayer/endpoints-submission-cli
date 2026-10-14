@@ -603,6 +603,28 @@ def _write_point_dirs(
         seen.add(key)
         by_concurrency.setdefault(c, {})[run_type] = run
 
+    # Only the metadata written into the bundle defines the curve. A separate
+    # accuracy donor does not replace its performance point's system description.
+    primary_runs = [pair.get("performance") or pair["accuracy"] for pair in by_concurrency.values()]
+    overrides = {r["system_info"].get("c_min_override") for r in primary_runs}
+    if len(overrides) > 1:
+        raise SubmissionBuildError(
+            f"Curve {system_id}/{model}: every point must omit c_min_override"
+            " or declare the same value"
+        )
+    override = next(iter(overrides))
+    if override is not None:
+        concurrencies = {
+            _extract_concurrency(r["config"], r["point_config"])
+            for r in primary_runs
+            if r["point_config"].get("offline") != "dedicated"
+        }
+        if override not in concurrencies:
+            raise SubmissionBuildError(
+                f"Curve {system_id}/{model}: c_min_override = {override}"
+                " must match a submitted concurrency point"
+            )
+
     model_dir = submission_dir / "results" / system_id / model
     for concurrency, runs_by_type in sorted(by_concurrency.items()):
         point_dir = model_dir / f"r{concurrency}"

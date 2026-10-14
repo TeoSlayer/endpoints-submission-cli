@@ -119,9 +119,7 @@ class TestDrafterList:
             d.model_id: d.approved_cohort for ds in load_approved_drafters().values() for d in ds
         }
         assert cohorts == {
-            model_id: "2026-09-C1"
-            for heads in self._REFERENCE_HEADS.values()
-            for model_id in heads
+            model_id: "2026-09-C1" for heads in self._REFERENCE_HEADS.values() for model_id in heads
         }
 
     @pytest.mark.parametrize(
@@ -139,7 +137,9 @@ class TestDrafterList:
             for drafter in approved:
                 binding = DrafterBinding(
                     points=[
-                        _point(tmp_path, {"weight_checksum": drafter.weight_checksum}, target_cohort)
+                        _point(
+                            tmp_path, {"weight_checksum": drafter.weight_checksum}, target_cohort
+                        )
                     ],
                     approved=approved,
                     benchmark=benchmark,
