@@ -63,6 +63,20 @@ def _errors(ctx, rule: str):
     return [r for r in _hits(ctx, rule) if r.severity == Severity.ERROR]
 
 
+def _missing(ctx) -> list[str]:
+    """Messages of the one curve-level error naming the points without an inline score."""
+    return [r.message for r in _errors(ctx, "agentic-accuracy-inline") if r.key == "missing"]
+
+
+def _failed(ctx, point: str) -> list[str]:
+    """Messages of the threshold failures at *point*."""
+    return [
+        r.message
+        for r in _errors(ctx, "agentic-accuracy-inline")
+        if r.key == "fail" and r.message.startswith(f"{point}:")
+    ]
+
+
 @pytest.mark.unit
 class TestTargetLookup:
     @pytest.mark.parametrize(
@@ -110,6 +124,7 @@ class TestGateScope:
         ctx = _ctx(tmp_path, model_name="some-new-model")
         hits = _hits(ctx, "agentic-accuracy")
         assert hits and hits[0].severity == Severity.WARNING
+        assert not _hits(ctx, "agentic-accuracy-inline")
 
     def test_tbd_thresholds_warn(self, tmp_path: Path, monkeypatch) -> None:
         """No current model is TBD, so stand one in to keep the path covered."""
@@ -142,12 +157,14 @@ class TestInlineAccuracy:
     """Per point: "Every … submitted Pareto point must satisfy all of the thresholds"."""
 
     def test_above_threshold_passes(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path, accuracy_by_point={16: _accuracy(inline=58.9)})
+        ctx = _ctx(tmp_path, accuracy_by_point={c: _accuracy(inline=58.9) for c in (16, 64)})
         assert not _errors(ctx, "agentic-accuracy-inline")
 
     def test_below_threshold_errors(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path, accuracy_by_point={16: _accuracy(inline=58.0)})
-        assert _errors(ctx, "agentic-accuracy-inline")
+        ctx = _ctx(
+            tmp_path, accuracy_by_point={16: _accuracy(inline=58.0), 64: _accuracy(inline=60.0)}
+        )
+        assert _failed(ctx, "r16") and not _failed(ctx, "r64")
 
     def test_every_point_is_gated_not_just_their_mean(self, tmp_path: Path) -> None:
         """One failing point fails, even where the mean clears — this is not mean-of-N."""
@@ -159,7 +176,9 @@ class TestInlineAccuracy:
 
     def test_fractional_scores_are_rescaled(self, tmp_path: Path) -> None:
         """Scorers report 0–1; the README's thresholds are percentages."""
-        ctx = _ctx(tmp_path, accuracy_by_point={16: _accuracy(inline=0.589, raw=True)})
+        ctx = _ctx(
+            tmp_path, accuracy_by_point={c: _accuracy(inline=0.589, raw=True) for c in (16, 64)}
+        )
         assert not _errors(ctx, "agentic-accuracy-inline")
 
     def test_tiny_fraction_is_not_read_as_a_percentage(self, tmp_path: Path) -> None:
@@ -177,13 +196,44 @@ class TestInlineAccuracy:
     def test_qwen_uses_its_own_threshold(self, tmp_path: Path) -> None:
         """56.0 clears Qwen's 55.86 and fails Kimi's 58.32."""
         for model, fails in (("qwen3_6-35b-a3b", False), ("kimi-k3", True)):
-            ctx = _ctx(tmp_path, model_name=model, accuracy_by_point={16: _accuracy(inline=56.0)})
+            ctx = _ctx(
+                tmp_path,
+                model_name=model,
+                accuracy_by_point={c: _accuracy(inline=56.0) for c in (16, 64)},
+            )
             assert bool(_errors(ctx, "agentic-accuracy-inline")) is fails
 
-    def test_absent_warns(self, tmp_path: Path) -> None:
+    def test_a_point_without_an_inline_score_errors(self, tmp_path: Path) -> None:
+        """Every submitted point must clear, so every point must report its score."""
+        ctx = _ctx(tmp_path, accuracy_by_point={16: _accuracy(inline=60.0)})
+        assert len(_missing(ctx)) == 1
+        assert "at r64 " in _missing(ctx)[0] and "r16" not in _missing(ctx)[0]
+
+    def test_a_point_with_only_swebench_errors(self, tmp_path: Path) -> None:
+        ctx = _ctx(
+            tmp_path,
+            accuracy_by_point={
+                16: _accuracy(inline=60.0, swebench=95.0),
+                64: _accuracy(swebench=95.0),
+            },
+        )
+        assert len(_missing(ctx)) == 1 and "at r64 " in _missing(ctx)[0]
+
+    def test_no_inline_score_anywhere_is_one_error_naming_every_point(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, accuracy_by_point={16: _accuracy(swebench=95.0)})
-        hits = _hits(ctx, "agentic-accuracy-inline")
-        assert hits and hits[0].severity == Severity.WARNING
+        assert len(_missing(ctx)) == 1 and "at r16, r64 " in _missing(ctx)[0]
+
+    def test_a_null_inline_score_is_missing(self, tmp_path: Path) -> None:
+        """The client writes ``score: null`` when no turn was scored."""
+        unscored = AccuracyResult.model_validate(
+            {
+                "accuracy_scores": [
+                    {"dataset_name": "performance", "dataset_type": "performance", "score": None}
+                ]
+            }
+        )
+        ctx = _ctx(tmp_path, accuracy_by_point={16: unscored, 64: _accuracy(inline=60.0)})
+        assert len(_missing(ctx)) == 1 and "at r16 " in _missing(ctx)[0]
 
 
 @pytest.mark.unit
@@ -206,26 +256,87 @@ class TestInlineEntry:
 
     def test_found_by_type_not_name(self, tmp_path: Path) -> None:
         report = AccuracyResult({"agentic_coding": {"score": 0.50, "dataset_type": "performance"}})
-        ctx = _ctx(tmp_path, accuracy_by_point={16: report})
-        assert _errors(ctx, "agentic-accuracy-inline")
+        ctx = _ctx(tmp_path, accuracy_by_point={16: report, 64: _accuracy(inline=60.0)})
+        assert _failed(ctx, "r16") and not _missing(ctx)
 
     def test_untyped_performance_entry_is_read(self, tmp_path: Path) -> None:
         """Clients that predate ``dataset_type`` wrote the name alone."""
         report = AccuracyResult({"performance": {"score": 0.50}})
-        ctx = _ctx(tmp_path, accuracy_by_point={16: report})
-        assert _errors(ctx, "agentic-accuracy-inline")
+        ctx = _ctx(tmp_path, accuracy_by_point={16: report, 64: _accuracy(inline=60.0)})
+        assert _failed(ctx, "r16") and not _missing(ctx)
 
     def test_accuracy_dataset_named_performance_is_not_inline(self, tmp_path: Path) -> None:
         report = AccuracyResult({"performance": {"score": 0.50, "dataset_type": "accuracy"}})
         ctx = _ctx(tmp_path, accuracy_by_point={16: report})
-        hits = _hits(ctx, "agentic-accuracy-inline")
-        assert [h.severity for h in hits] == [Severity.WARNING]
+        assert len(_missing(ctx)) == 1 and "at r16, r64 " in _missing(ctx)[0]
 
     def test_untyped_entry_under_another_name_is_not_inline(self, tmp_path: Path) -> None:
         report = AccuracyResult({"agentic_combined": {"score": 0.50}})
         ctx = _ctx(tmp_path, accuracy_by_point={16: report})
-        hits = _hits(ctx, "agentic-accuracy-inline")
-        assert [h.severity for h in hits] == [Severity.WARNING]
+        assert len(_missing(ctx)) == 1 and "at r16, r64 " in _missing(ctx)[0]
+
+
+@pytest.mark.unit
+class TestAccuracyDatasets:
+    """Which entries are accuracy results: everything but the inline score."""
+
+    @pytest.mark.parametrize(
+        ("root", "expected"),
+        [
+            ({"performance": {"score": 0.5, "dataset_type": "performance"}}, []),
+            ({"performance": {"score": 0.5}}, []),
+            (
+                {
+                    "swe_bench": {"score": 0.9, "dataset_type": "accuracy"},
+                    "performance": {"score": 0.5, "dataset_type": "performance"},
+                },
+                ["swe_bench"],
+            ),
+            ({"performance": {"score": 0.5, "dataset_type": "accuracy"}}, ["performance"]),
+            ({"gpqa": {"score": 0.7}, "aime": {"score": 0.8}}, ["gpqa", "aime"]),
+        ],
+    )
+    def test_accuracy_datasets(self, root, expected) -> None:
+        assert AccuracyResult(root).accuracy_datasets() == expected
+
+
+@pytest.mark.unit
+class TestCoverageCountsAccuracyResults:
+    """An inline-only file is the performance run's own score, not one of the N results."""
+
+    # One point per mandatory band under the shared test regions, plus submitter's-choice points.
+    _BANDS = (16, 40, 64, 256)
+    _CHOICE = (128, 512)
+
+    def _curve(self, tmp_path: Path, accuracy_by_point):
+        points = [
+            (tmp_path / f"p{c}.yaml", _agentic_config(c))
+            for c in sorted((*self._BANDS, *self._CHOICE))
+        ]
+        return _ctx(tmp_path, valid_points=points, accuracy_by_point=accuracy_by_point)
+
+    def test_inline_only_results_at_other_points_are_not_extra(self, tmp_path: Path) -> None:
+        results = {c: _accuracy(inline=60.0, swebench=95.0) for c in self._BANDS}
+        results.update({c: _accuracy(inline=60.0) for c in self._CHOICE})
+        ctx = self._curve(tmp_path, results)
+        assert not _errors(ctx, "accuracy-coverage")
+        assert not _errors(ctx, "agentic-accuracy-inline")
+        passed = [h for h in _hits(ctx, "accuracy-coverage") if h.severity == Severity.INFO]
+        assert passed and "4 point(s) carry an accuracy run" in passed[0].message
+
+    def test_a_swebench_result_at_a_choice_point_is_still_extra(self, tmp_path: Path) -> None:
+        results = {c: _accuracy(inline=60.0, swebench=95.0) for c in (*self._BANDS, 128)}
+        results[512] = _accuracy(inline=60.0)
+        ctx = self._curve(tmp_path, results)
+        errors = _errors(ctx, "accuracy-coverage")
+        assert errors and "r128" in errors[0].message and "r512" not in errors[0].message
+
+    def test_inline_only_results_cannot_fill_a_band(self, tmp_path: Path) -> None:
+        results = {c: _accuracy(inline=60.0, swebench=95.0) for c in (16, 40, 64)}
+        results.update({c: _accuracy(inline=60.0) for c in (256, *self._CHOICE)})
+        ctx = self._curve(tmp_path, results)
+        errors = _errors(ctx, "accuracy-coverage")
+        assert errors and "High" in errors[0].message
 
 
 @pytest.mark.unit

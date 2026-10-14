@@ -850,22 +850,88 @@ class TestRunArchiveLayouts:
 
         assert not list(sub_dir.rglob("accuracy_results.json"))
 
+    def _accuracy_only_archive(self, run_folder: Path, tmp_path: Path, accuracy: dict) -> Path:
+        """A ``--mode acc`` run: accuracy datasets only, so it files as an accuracy run."""
+        archive = self._both_mode_archive(run_folder, tmp_path, "acc", accuracy=accuracy)
+        config_path = tmp_path / "acc" / "config.yaml"
+        config = yaml.safe_load(config_path.read_text())
+        config["datasets"] = [{"name": "cnn_dailymail_acc", "type": "accuracy"}]
+        config_path.write_text(yaml.dump(config))
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(tmp_path / "acc", arcname="acc")
+        return archive
+
+    def test_a_separate_accuracy_run_gains_the_inline_score(
+        self, run_folder: Path, tmp_path: Path
+    ) -> None:
+        """The checker gates inline accuracy at every agentic point; keep the performance run's."""
+        inline = {"dataset_name": "performance", "dataset_type": "performance", "score": 0.53}
+        swe = {"dataset_name": "swe_bench", "dataset_type": "accuracy", "score": 0.97}
+        both = self._both_mode_archive(
+            run_folder, tmp_path, "both", accuracy={"accuracy_scores": [inline]}
+        )
+        acc_only = self._accuracy_only_archive(
+            run_folder, tmp_path, {"accuracy_scores": [swe], "osl_tokenization_s": 1.5}
+        )
+
+        sub_dir = build_submission_folder(
+            [("run-001", both), ("run-002", acc_only)],
+            "standardized",
+            "available",
+            tmp_path / "sub",
+        )
+
+        written = json.loads(next(sub_dir.rglob("accuracy_results.json")).read_text())
+        assert written == {"accuracy_scores": [swe, inline], "osl_tokenization_s": 1.5}
+
+    def test_a_separate_accuracy_runs_own_inline_score_is_kept(
+        self, run_folder: Path, tmp_path: Path
+    ) -> None:
+        ours = {"dataset_name": "performance", "dataset_type": "performance", "score": 0.6}
+        theirs = {"dataset_name": "performance", "dataset_type": "performance", "score": 0.5}
+        both = self._both_mode_archive(
+            run_folder, tmp_path, "both", accuracy={"accuracy_scores": [theirs]}
+        )
+        acc_only = self._accuracy_only_archive(run_folder, tmp_path, {"accuracy_scores": [ours]})
+
+        sub_dir = build_submission_folder(
+            [("run-001", both), ("run-002", acc_only)],
+            "standardized",
+            "available",
+            tmp_path / "sub",
+        )
+
+        written = json.loads(next(sub_dir.rglob("accuracy_results.json")).read_text())
+        assert written == {"accuracy_scores": [ours]}
+
+    def test_an_inline_name_taken_by_an_accuracy_entry_is_not_added(
+        self, run_folder: Path, tmp_path: Path
+    ) -> None:
+        """Two entries under one name would make the file invalid; leave it as the run wrote it."""
+        inline = {"dataset_name": "performance", "dataset_type": "performance", "score": 0.53}
+        named = {"dataset_name": "performance", "dataset_type": "accuracy", "score": 0.97}
+        both = self._both_mode_archive(
+            run_folder, tmp_path, "both", accuracy={"accuracy_scores": [inline]}
+        )
+        acc_only = self._accuracy_only_archive(run_folder, tmp_path, {"accuracy_scores": [named]})
+
+        sub_dir = build_submission_folder(
+            [("run-001", both), ("run-002", acc_only)],
+            "standardized",
+            "available",
+            tmp_path / "sub",
+        )
+
+        written = json.loads(next(sub_dir.rglob("accuracy_results.json")).read_text())
+        assert written == {"accuracy_scores": [named]}
+
     def test_a_separate_accuracy_run_still_wins(self, run_folder: Path, tmp_path: Path) -> None:
         both = self._both_mode_archive(
             run_folder, tmp_path, "both", accuracy={"from": {"num_samples": 1, "score": 1.0}}
         )
-        acc_only = self._both_mode_archive(
-            run_folder, tmp_path, "acc", accuracy={"from": {"num_samples": 1, "score": 2.0}}
+        acc_only = self._accuracy_only_archive(
+            run_folder, tmp_path, {"from": {"num_samples": 1, "score": 2.0}}
         )
-        acc_dir = tmp_path / "acc-config"
-        with tarfile.open(acc_only) as tar:
-            tar.extractall(acc_dir, filter="data")
-        config_path = acc_dir / "acc" / "config.yaml"
-        config = yaml.safe_load(config_path.read_text())
-        config["datasets"] = [{"name": "cnn_dailymail_acc", "type": "accuracy"}]
-        config_path.write_text(yaml.dump(config))
-        with tarfile.open(acc_only, "w:gz") as tar:
-            tar.add(acc_dir / "acc", arcname="acc")
 
         sub_dir = build_submission_folder(
             [("run-001", both), ("run-002", acc_only)],

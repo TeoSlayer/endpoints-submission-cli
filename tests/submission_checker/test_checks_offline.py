@@ -422,6 +422,28 @@ class TestAccuracyCoverage:
             if r.rule == "accuracy-coverage" and r.severity == Severity.ERROR
         ]
 
+    @pytest.mark.parametrize(
+        ("offline", "covered", "concurrency"),
+        [("dedicated", [16, 40, 100, 512], 24576), ("elected", [16, 40, 100], 512)],
+    )
+    def test_an_inline_only_result_is_not_the_offline_points_accuracy(
+        self, tmp_path: Path, offline: str, covered: list[int], concurrency: int
+    ) -> None:
+        """The performance run's inline score is not an accuracy run (§5.3)."""
+        point = _offline_config(concurrency=concurrency, offline=offline)
+        pts = self._pts(tmp_path, covered)
+        pts.append((tmp_path / "rOff" / "point.yaml", point))
+        by_point = dict.fromkeys(covered, _ACCURACY)
+        by_point[point.concurrency] = AccuracyResult(
+            {"performance": {"score": 0.5, "dataset_type": "performance"}}
+        )
+        ctx = _model_ctx(tmp_path, valid_points=pts, accuracy_by_point=by_point)
+        assert [
+            r
+            for r in ctx._check_results
+            if r.rule == "accuracy-coverage" and r.severity == Severity.ERROR and r.key == "fail"
+        ]
+
     def test_skipped_without_a_region_basis(self, tmp_path: Path) -> None:
         ctx = _model_ctx(tmp_path, valid_points=[], regions=None)
         assert not [r for r in ctx._check_results if r.rule == "accuracy-coverage"]

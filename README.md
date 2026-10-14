@@ -583,14 +583,18 @@ keeps the Offline requirement in force rather than letting one mislabelled point
 it off.
 
 
-Accuracy is **required** once per mandatory region, not at every point, and §4.3 makes
-`N` "a fixed count, not a floor": `accuracy-coverage` asks for exactly one result in
-each of the four mandatory bands (plus the Offline point for a non-agentic benchmark).
-A second result in a band, or one at a submitter's-choice point, is an error — the two
-look the same on disk. A point at concurrency ≤ 32 above `C_min` lies in both Ultra Low
-and Low Concurrency, but its one result fills only one of them; the exception is
-§5.7.2's elected `C_max` point, which counts once as its region point and once as the
-Offline result. The gates below then judge every result present.
+An accuracy run (SWE-bench, or a non-agentic benchmark's datasets) is **required** once
+per mandatory region, not at every point, and §4.3 makes `N` "a fixed count, not a floor":
+`accuracy-coverage` asks for exactly one result in each of the four mandatory bands (plus
+the Offline point for a non-agentic benchmark). A second result in a band, or one at a
+submitter's-choice point, is an error — the two look the same on disk. The inline score
+the client writes for every performance run (`dataset_type: performance`) is not an
+accuracy run: an `accuracy_results.json` holding only that entry counts toward no band,
+and for an agentic benchmark it is required at every point (below). A point at concurrency
+≤ 32 above `C_min` lies in both Ultra Low and Low Concurrency, but its one result fills
+only one of them; the exception is §5.7.2's elected `C_max` point, which counts once as
+its region point and once as the Offline result. The gates below then judge every result
+present.
 
 Accuracy is gated differently too. §15's gate folds every dataset of a point into one
 sample-weighted score per metric; the agentic benchmarks gate three quantities that do
@@ -599,7 +603,7 @@ three rules above:
 
 | Quantity | Source | Aggregation |
 |---|---|---|
-| Inline accuracy | the `dataset_type: performance` entry in the accuracy results (named `performance` by the client) | each result on its own — every point that carries one must clear. Exactly one accuracy run per mandatory region is allowed (`accuracy-coverage`); points without one are not gated |
+| Inline accuracy | the `dataset_type: performance` entry in the accuracy results (named `performance` by the client) | **per point** — every submitted point must report one and clear it; a point without one is an error. Submit each point's `accuracy_results.json` as the client writes it |
 | SWE-bench accuracy | `swe_bench` in the accuracy results | **mean-of-4** across the mandatory regions (§4.3's multi-turn branch) |
 | OSL per-turn mean | `output_sequence_lengths_full_run.output_sequence_lengths.avg` in `result_summary.json` | per point, against a range |
 

@@ -68,15 +68,15 @@ accuracy-coverage:
   title: Accuracy at the mandatory points
   spec: §4.3, §5.3
   messages:
-    pass: Accuracy present in all four mandatory bands ({accuracy_by_point_count} point(s) carry results;
-      §5.3 N={value})
-    pass-2: Offline point r{concurrency} carries accuracy results
+    pass: Accuracy present in all four mandatory bands ({accuracy_by_point_count} point(s) carry an accuracy
+      run; §5.3 N={value})
+    pass-2: Offline point r{concurrency} carries an accuracy run
     fail:
-      text: Offline point r{concurrency} has no accuracy results; §5.3 counts it among the N required
-        points
+      text: Offline point r{concurrency} has no accuracy run (an entry other than the inline score); §5.3 counts
+        it among the N required points
       fix: Run accuracy at the Offline point r{concurrency} too.
     missing-bands:
-      text: 'No accuracy results at a point in: {bands}'
+      text: 'No accuracy run (an entry other than the inline score) at a point in: {bands}'
       fix: 'Run accuracy at one point in each of: {bands}.'
     extra-results:
       text: 'Accuracy results at {listed} fill no mandatory point: §4.3 allows exactly one per mandatory
@@ -137,9 +137,11 @@ agentic-accuracy-inline:
   title: Agentic accuracy inline
   spec: §4.3
   messages:
-    warn: 'No point reports an inline accuracy score (an accuracy entry with `dataset_type: {performance_dataset_type}`);
-      official agentic submissions set `accuracy_config.eval_method: agentic_inference_inline` on the performance
-      dataset'
+    missing:
+      text: 'No inline accuracy score at {listed} (an accuracy entry with `dataset_type: {performance_dataset_type}`
+        and a score); every submitted point must clear the inline threshold'
+      fix: 'Submit the point''s accuracy_results.json as the client writes it, with `accuracy_config.eval_method:
+        agentic_inference_inline` on the performance dataset.'
     fail: 'r{concurrency}: inline accuracy {score:.2f} < {inline_min} required for {targets_name}'
     pass: 'r{concurrency}: inline accuracy {score:.2f} ≥ {inline_min}'
 agentic-accuracy-swebench:
