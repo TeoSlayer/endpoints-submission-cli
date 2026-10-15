@@ -1755,3 +1755,84 @@ class TestSharedTreeFlags:
 
         with pytest.raises(SubmissionBuildError, match="more than one implementation"):
             self._build(archive, tmp_path, shared_src_dirs=[self._src_tree(tmp_path, "vllm")])
+
+
+@pytest.mark.unit
+class TestCMinOverride:
+    def _archive(self, run_folder, tmp_path, name, concurrency, override="absent", model=None):
+        import shutil
+
+        folder = tmp_path / name
+        shutil.copytree(run_folder, folder)
+        desc = json.loads((folder / "system_desc.json").read_text())
+        if override != "absent":
+            desc["c_min_override"] = override
+        (folder / "system_desc.json").write_text(json.dumps(desc))
+        point = yaml.safe_load((folder / "point.yaml").read_text())
+        point["concurrency"] = concurrency
+        if model:
+            point["model_name"] = model
+        (folder / "point.yaml").write_text(yaml.safe_dump(point))
+        archive = tmp_path / f"{name}.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(folder, arcname=name)
+        return name, archive
+
+    @pytest.mark.parametrize("override", ["absent", 16, 32])
+    def test_preserves_declaration_or_omission(self, run_folder, tmp_path, override):
+        runs = [self._archive(run_folder, tmp_path, f"run{c}", c, override) for c in (16, 32)]
+        org = build_submission_folder(runs, "standardized", "available", tmp_path / "out")
+        descs = list(_submission_root(org).rglob("system_desc.json"))
+        assert len(descs) == 2
+        for path in descs:
+            data = json.loads(path.read_text())
+            if override == "absent":
+                assert "c_min_override" not in data
+            else:
+                assert data["c_min_override"] == override
+
+    @pytest.mark.parametrize("other", ["absent", 16])
+    def test_rejects_inconsistent_curve(self, run_folder, tmp_path, other):
+        runs = [
+            self._archive(run_folder, tmp_path, "a", 16, 32),
+            self._archive(run_folder, tmp_path, "b", 32, other),
+        ]
+        with pytest.raises(SubmissionBuildError, match="every point must omit c_min_override"):
+            build_submission_folder(runs, "standardized", "available", tmp_path / "out")
+
+    @pytest.mark.parametrize("override", [None, True, 16.0, "16", 33])
+    def test_rejects_invalid_override_in_archive(self, run_folder, tmp_path, override):
+        run = self._archive(run_folder, tmp_path, "a", 16, override)
+        with pytest.raises(SubmissionBuildError, match="c_min_override"):
+            build_submission_folder([run], "standardized", "available", tmp_path / "out")
+
+    def test_rejects_unmeasured_override(self, run_folder, tmp_path):
+        run = self._archive(run_folder, tmp_path, "a", 16, 32)
+        with pytest.raises(SubmissionBuildError, match="must match a submitted"):
+            build_submission_folder([run], "standardized", "available", tmp_path / "out")
+
+    def test_different_models_can_choose_different_overrides(self, run_folder, tmp_path):
+        runs = [
+            self._archive(run_folder, tmp_path, "a", 16, 16, model="model-a"),
+            self._archive(run_folder, tmp_path, "b", 32, 32, model="model-b"),
+        ]
+        org = build_submission_folder(runs, "standardized", "available", tmp_path / "out")
+        values = {
+            json.loads(p.read_text())["c_min_override"]
+            for p in _submission_root(org).rglob("system_desc.json")
+        }
+        assert values == {16, 32}
+
+    def test_separate_accuracy_donor_does_not_change_override(self, run_folder, tmp_path):
+        perf = self._archive(run_folder, tmp_path, "perf", 16, 16)
+        donor = self._archive(run_folder, tmp_path, "donor", 16)
+        folder = tmp_path / "donor"
+        config_path = folder / "config.yaml"
+        config = yaml.safe_load(config_path.read_text())
+        config["datasets"][0]["type"] = "accuracy"
+        config_path.write_text(yaml.safe_dump(config))
+        with tarfile.open(donor[1], "w:gz") as tar:
+            tar.add(folder, arcname="donor")
+        org = build_submission_folder([perf, donor], "standardized", "available", tmp_path / "out")
+        (path,) = _submission_root(org).rglob("system_desc.json")
+        assert json.loads(path.read_text())["c_min_override"] == 16

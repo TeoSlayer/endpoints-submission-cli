@@ -75,11 +75,11 @@ def _weighted_mean(pairs: list[tuple[float, float | None]]) -> float:
 def accuracy_bands(concurrency: int, regions: Regions) -> list[str]:
     """The §5.3 mandatory bands an accuracy result at *concurrency* could fill.
 
-    Ultra Low Concurrency is the fixed range 1–32 while Low Concurrency starts at
-    ``C_min + 1`` (§5.4), so a point in between lies in both and both are listed.
+    Without an override, Ultra Low covers 1–32 and may overlap Low or Medium.
+    With an override it ends at C_min; the four coverage ranges are disjoint.
     """
     bands: list[str] = []
-    if concurrency <= ULTRA_LOW_CONCURRENCY_MAX:
+    if regions.ultra_low_concurrency.contains(concurrency):
         bands.append("ultra_low_concurrency")
     band = covered_region(concurrency, regions)
     if band is not None and band != "low_latency":
@@ -409,15 +409,14 @@ class ModelContext(BaseModel):
 
     @model_validator(mode="after")
     def _check_ultra_low_concurrency_coverage(self) -> ModelContext:
-        """§5.4: at least one point must sit in the Ultra Low Concurrency band (1–32).
-
-        Checked against the *fixed* 1–32 window rather than the derived ``low_latency``
-        region. ``C_min`` is the lowest submitted concurrency, so ``low_latency`` is
-        ``1–C_min`` and always contains that point — testing it would be vacuous. The
-        real requirement is that the curve reaches down into the band at all.
-        """
+        """§5.4: Ultra Low coverage is 1–32 by default, or 1–C_min with an override."""
         concurrencies = self._present_concurrencies
-        ultra_low = [c for c in concurrencies if c <= ULTRA_LOW_CONCURRENCY_MAX]
+        limit = (
+            self.regions.ultra_low_concurrency.end
+            if self.regions is not None
+            else ULTRA_LOW_CONCURRENCY_MAX
+        )
+        ultra_low = [c for c in concurrencies if 1 <= c <= limit]
         if ultra_low:
             self._check_results.append(
                 ok(
@@ -425,7 +424,7 @@ class ModelContext(BaseModel):
                     "pass",
                     self.points_dir,
                     ultra_low=sorted(ultra_low),
-                    ultra_low_concurrency_max=ULTRA_LOW_CONCURRENCY_MAX,
+                    ultra_low_concurrency_max=limit,
                 )
             )
         else:
@@ -436,7 +435,7 @@ class ModelContext(BaseModel):
                     "ultra-low-concurrency-coverage",
                     "fail",
                     self.points_dir,
-                    ultra_low_concurrency_max=ULTRA_LOW_CONCURRENCY_MAX,
+                    ultra_low_concurrency_max=limit,
                     detail=detail,
                 )
             )
@@ -805,19 +804,6 @@ class ModelContext(BaseModel):
                 )
             )
 
-    def _mandatory_band(self, concurrency: int) -> str | None:
-        """The §5.3 mandatory band a point's accuracy result counts towards, or ``None``.
-
-        One band per point: a mean over bands must not count one result twice. A point
-        ≤ 32 is read as Ultra Low here; ``accuracy-coverage`` settles the overlap with
-        Low Concurrency by matching, and rejects a curve whose results do not fit.
-        """
-        if concurrency <= ULTRA_LOW_CONCURRENCY_MAX:
-            return "ultra_low_concurrency"
-        assert self.regions is not None
-        band = covered_region(concurrency, self.regions)
-        return band if band in _MANDATORY_BANDS else None
-
     def _gate_agentic_swebench(self, targets: AgenticTargets) -> None:
         """SWE-bench, mean-of-N over the four mandatory bands — §4.3's multi-turn branch.
 
@@ -842,10 +828,14 @@ class ModelContext(BaseModel):
         assert targets.swebench_min is not None
         if self.regions is None:
             return  # region-computation already reports why no band can be assigned
+        candidates = self._band_candidates()
+        assignment = {c: band for band, c in match_accuracy_bands(candidates).items()}
         by_band: dict[str, list[tuple[int, float]]] = {}
-        for c in sorted(self.accuracy_by_point):
+        for c, bands, _elected in candidates:
             score = self._dataset_score(c, SWEBENCH_DATASET, "agentic-accuracy-swebench")
-            band = self._mandatory_band(c)
+            # Coverage rejects extras. Keep their diagnostic mean, but use the exact
+            # coverage assignment for every matched result, including legacy overlaps.
+            band = assignment.get(c) or (bands[0] if bands else None)
             if score is not None and band is not None:
                 by_band.setdefault(band, []).append((c, score))
         if not by_band:

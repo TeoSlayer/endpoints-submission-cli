@@ -5,19 +5,22 @@ from __future__ import annotations
 import datetime
 import re
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     StrictFloat,
     StringConstraints,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
 from ...messages import Invalid
+from ..regions import validate_c_min_override
 
 __all__ = [
     "AcceleratorInfo",
@@ -220,6 +223,8 @@ class SystemDescription(BaseModel):
     #: ISO 8601 date; required when Preview (§8.2, Submission Rules §7.3.4).
     target_availability_date: str | None = None
     max_supported_concurrency: int
+    #: Optional §5.4 override. Explicit null is invalid; absence preserves legacy derivation.
+    c_min_override: int | None = None
     system_size: str
     system_node_ensemble_count: int
     system_node_ensemble_total: int
@@ -272,6 +277,19 @@ class SystemDescription(BaseModel):
     # the structured per-dataset form {dataset: {"scores": {name: value}}} is also
     # accepted and will become the only valid form in a future round.
     measured_accuracy_score: str | float | dict[str, DatasetAccuracyScores] | None = None
+
+    @field_validator("c_min_override", mode="before")
+    @classmethod
+    def _validate_c_min_override(cls, value: object) -> int:
+        return validate_c_min_override(value)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Preserve omission of the override when building or round-tripping metadata."""
+        data: dict[str, Any] = handler(self)
+        if self.c_min_override is None:
+            data.pop("c_min_override", None)
+        return data
 
     @field_validator("division", mode="before")
     @classmethod

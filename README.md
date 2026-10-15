@@ -443,13 +443,30 @@ Choices the rules leave open, made here conservatively:
 
 ### Regions (§5)
 
-`C_min` is **derived** from the submission's own points in v1.0, not declared, so the
-boundaries differ per curve. The 10 % margin above `C_max` is its own region and does
-not satisfy High Concurrency coverage.
+By default, `C_min` is derived from the lowest submitted concurrency and Ultra Low
+Concurrency coverage remains 1–32. Following policies PR #150, submitters may instead
+set top-level `"c_min_override": 32` (for example) in each point's `system_desc.json`.
+The override must be a JSON integer from 1 through 32 matching a submitted concurrency
+point. Every point on a system/model curve must declare the same value, or all must
+omit it; `null`, strings, floats, and booleans are invalid. Different curves may use
+different values. The CLI preserves declarations when building bundles and rejects
+inconsistent or unmeasured overrides.
+
+With an override, Ultra Low Concurrency spans 1–C_min. It may contain additional
+submitter's-choice points, and any point in that range may supply its one required
+accuracy result. For measurements at 16 and 32, choosing 32 puts both in Ultra Low;
+choosing 16 puts only 16 there. Other region boundaries use the selected C_min.
+Duration allowances remain 600 seconds at concurrency 1–32 (§6.2).
+The 10 % margin above `C_max` does not satisfy High Concurrency coverage.
+
+Declarations are fixed once peer review starts. This checker validates one bundle;
+enforcing changes against a previously reviewed submission requires submission-history
+validation by the service or reviewers.
 
 | Rule | Spec | Description |
 |------|------|-------------|
-| `region-basis` | §5.4 | Reports the derived `C_min` and how many points it came from |
+| `region-basis` | §5.4 | Reports whether `C_min` was derived or explicitly overridden |
+| `c-min-override` | §5.4 | Override is a consistent integer in 1–32 matching a submitted point |
 | `region-computation` | §5.5 | `(C_max, C_min)` is a valid input to the reference algorithm |
 | `concurrency-in-range` | §9.1 | Each concurrency falls in a valid region, margin included |
 | `region-declared` | §8.3 | Declared `region` is one of the spec's values |
@@ -457,7 +474,7 @@ not satisfy High Concurrency coverage.
 | `offline-declared` | §5.7 | `offline` is `dedicated`, `elected`, or `none` |
 | `offline-point-present` | §5.7 | Exactly one Offline point, `elected` sitting on the C_max point — or **none at all** for an agentic benchmark, which §5.7 says "neither requires nor may include" one |
 | `offline-ordering` | §5.7.2 | Offline beats C_max on throughput (2% tolerance) and concurrency (warn) |
-| `ultra-low-concurrency-coverage` | §5.4 | At least one point at concurrency ≤ 32 |
+| `ultra-low-concurrency-coverage` | §5.4 | At least one point in 1–32 by default, or 1–C_min with an override |
 | `low-concurrency-coverage` | §9.1 | At least one point in the Low Concurrency region |
 | `med-concurrency-coverage` | §9.1 | At least one point in the Medium Concurrency region |
 | `high-concurrency-coverage` | §9.1 | At least one point in the High Concurrency region |
@@ -590,11 +607,12 @@ the Offline point for a non-agentic benchmark). A second result in a band, or on
 submitter's-choice point, is an error — the two look the same on disk. The inline score
 the client writes for every performance run (`dataset_type: performance`) is not an
 accuracy run: an `accuracy_results.json` holding only that entry counts toward no band,
-and for an agentic benchmark it is required at every point (below). A point at concurrency
-≤ 32 above `C_min` lies in both Ultra Low and Low Concurrency, but its one result fills
-only one of them; the exception is §5.7.2's elected `C_max` point, which counts once as
-its region point and once as the Offline result. The gates below then judge every result
-present.
+and for an agentic benchmark it is required at every point (below). Without an override,
+a point at concurrency ≤ 32 above `C_min` may lie in Ultra Low and another concurrency
+region. Its result fills only one region,
+using the same assignment for coverage and the multi-turn mean. The exception is
+§5.7.2's elected `C_max` point, which counts once as its region point and once as the
+Offline result. The gates below then judge every result present.
 
 Accuracy is gated differently too. §15's gate folds every dataset of a point into one
 sample-weighted score per metric; the agentic benchmarks gate three quantities that do

@@ -50,7 +50,8 @@ def _accuracy(
 
 def _ctx(tmp_path: Path, model_name: str = "kimi-k3", **kwargs):
     points = kwargs.pop("valid_points", None) or [
-        (tmp_path / f"p{c}.yaml", _agentic_config(c)) for c in (16, 64)
+        (tmp_path / f"p{c}.yaml", _agentic_config(c))
+        for c in sorted({16, 64} | set(kwargs.get("accuracy_by_point", {})))
     ]
     return _model_ctx(tmp_path, model_name=model_name, valid_points=points, **kwargs)
 

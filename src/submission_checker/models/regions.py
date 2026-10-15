@@ -9,10 +9,8 @@ points" — this module is that implementation, so it must match the spec exactl
 Appendix B's 14-row quick-reference table is reproduced as test vectors in
 ``tests/submission_checker/test_regions.py``.
 
-Note §5.4's Worked Example C contradicts both this algorithm and Appendix B (it
-prints a Low Concurrency range starting at ``C_min`` rather than ``C_min + 1``, and
-a Medium Concurrency end of 116 rather than 117). The algorithm and Appendix B
-agree with each other; the worked example is wrong.
+An optional ``c_min_override`` selects the lower boundary (§5.4). Without it,
+Ultra Low coverage retains the legacy 1–32 range, independently of ``low_latency``.
 """
 
 from __future__ import annotations
@@ -35,9 +33,10 @@ __all__ = [
     "compute_regions",
     "covered_region",
     "min_duration_ms",
+    "validate_c_min_override",
 ]
 
-#: Upper bound of the Ultra Low Concurrency region (§5.4), fixed for all submissions.
+#: Default Ultra Low coverage limit and maximum permitted override (§5.4).
 ULTRA_LOW_CONCURRENCY_MAX = 32
 
 #: Region names the algorithm can emit, in ascending concurrency order.
@@ -79,12 +78,14 @@ class Regions:
     """All region boundaries for a given ``(C_max, C_min)`` pair.
 
     Attributes:
-        low_latency: ``1`` to ``C_min`` — the Ultra Low Concurrency point's band.
+        low_latency: ``1`` to ``C_min`` from the reference algorithm.
+            Coverage uses :attr:`ultra_low_concurrency` instead.
         low_concurrency: First logarithmic concurrency region.
         med_concurrency: Second logarithmic concurrency region.
         high_concurrency: Third logarithmic concurrency region, ending at ``C_max``.
         margin: The §5.4 10 % extension above ``C_max``. A distinct region in v1.0 —
             it used to be folded into the end of the high region.
+        c_min_overridden: Whether the lower boundary was explicitly declared.
     """
 
     low_latency: RegionBounds
@@ -92,6 +93,16 @@ class Regions:
     med_concurrency: RegionBounds
     high_concurrency: RegionBounds
     margin: RegionBounds
+    c_min_overridden: bool = False
+
+    @property
+    def ultra_low_concurrency(self) -> RegionBounds:
+        """Ultra Low coverage and accuracy range, preserving defaults without an override."""
+        return (
+            self.low_latency
+            if self.c_min_overridden
+            else RegionBounds(1, ULTRA_LOW_CONCURRENCY_MAX)
+        )
 
 
 #: Minimum steady-state duration per region for non-agentic benchmarks (§6.2's
@@ -131,7 +142,14 @@ def min_duration_ms(region: str, concurrency: int, *, agentic: bool) -> int:
     return table.get(region, 0)
 
 
-def compute_regions(c_max: int, c_min: int) -> Regions:
+def validate_c_min_override(value: object) -> int:
+    """Validate an explicitly supplied JSON integer; omission is handled by the caller."""
+    if type(value) is not int or not 1 <= value <= ULTRA_LOW_CONCURRENCY_MAX:
+        raise Invalid("c-min-override", "invalid", value=value)
+    return value
+
+
+def compute_regions(c_max: int, c_min: int, *, c_min_overridden: bool = False) -> Regions:
     """Compute region boundaries from a curve's ``C_max`` and ``C_min``.
 
     The reference algorithm from §5.5, using banker's rounding (Python's built-in
@@ -140,8 +158,9 @@ def compute_regions(c_max: int, c_min: int) -> Regions:
     Args:
         c_max: Maximum Supported Concurrency, declared in the system description.
             Must be greater than 32.
-        c_min: Minimum concurrency, **derived from the submission's points** (§5.4)
-            rather than declared. Must be between 1 and 32 inclusive.
+        c_min: Lower boundary, derived from the points or explicitly overridden (§5.4).
+            Must be between 1 and 32 inclusive.
+        c_min_overridden: Whether an explicit override selects Ultra Low coverage 1–C_min.
 
     Returns:
         A :class:`Regions` instance with inclusive ``[start, end]`` boundaries.
@@ -175,6 +194,7 @@ def compute_regions(c_max: int, c_min: int) -> Regions:
         med_concurrency=RegionBounds(low_conc_end + 1, med_conc_end),
         high_concurrency=RegionBounds(med_conc_end + 1, c_max),
         margin=RegionBounds(c_max + 1, margin_end),
+        c_min_overridden=c_min_overridden,
     )
 
 

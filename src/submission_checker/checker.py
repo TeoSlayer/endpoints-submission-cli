@@ -42,6 +42,7 @@ from .models import (
 from .models import err as _err
 from .models import ok as _ok
 from .models import warn as _warn
+from .models.file.point_config import OFFLINE_DEDICATED
 from .models.file.system_power import AIR_COOLED_OVERHEAD, overhead_for_cooling
 from .models.loader import (
     load_accuracy_result,
@@ -51,7 +52,7 @@ from .models.loader import (
     load_system_description,
     load_system_power,
 )
-from .models.regions import ULTRA_LOW_CONCURRENCY_MAX
+from .models.regions import ULTRA_LOW_CONCURRENCY_MAX, validate_c_min_override
 from .seed_sets import SeedSet, SeedSetError, load_seed_sets
 
 if TYPE_CHECKING:
@@ -691,6 +692,8 @@ class SubmissionChecker:
         # checks do not depend on it, and C_max can still come from the raw field.
         system_desc, sd_path, sd_results = self._load_curve_system_desc(point_dirs, model_dir)
         results.extend(sd_results)
+        c_min_override, override_results = self._resolve_c_min_override(point_dirs, model_dir)
+        results.extend(override_results)
         c_max = (
             system_desc.max_supported_concurrency
             if system_desc is not None
@@ -700,10 +703,12 @@ class SubmissionChecker:
         results.extend(self._check_model_name(loaded))
 
         # ── Phase 1b: derive C_min, then the region boundaries ────────────────
-        regions, region_results = self._derive_regions(
-            c_max, loaded, unparsed, len(point_dirs), model_dir, sd_path
-        )
-        results.extend(region_results)
+        regions = None
+        if not override_results:
+            regions, region_results = self._derive_regions(
+                c_max, loaded, unparsed, len(point_dirs), model_dir, sd_path, c_min_override
+            )
+            results.extend(region_results)
 
         # ── Phase 2: the region-dependent, per-point rules ────────────────────
         valid_points: list[tuple[Path, PointConfig]] = [(p.yaml_path, p.config) for p in loaded]
@@ -905,6 +910,36 @@ class SubmissionChecker:
             _ok("system-description-consistency", "pass", model_dir, present_count=len(present))
         ]
 
+    def _resolve_c_min_override(
+        self, point_dirs: list[Path], model_dir: Path
+    ) -> tuple[int | None, list[CheckResult]]:
+        """Require unanimous, valid declarations, even in otherwise invalid descriptions.
+
+        Read every raw file: validating only the reference copy can miss a boolean
+        or float equal to its integer value, or silently fall back after a bad field.
+        """
+        descriptions = [
+            (p / layout.SYSTEM_DESC_JSON, _read_json(p / layout.SYSTEM_DESC_JSON))
+            for p in point_dirs
+        ]
+        if not any(data is not None and "c_min_override" in data for _, data in descriptions):
+            return None, []
+        values: set[int] = set()
+        results: list[CheckResult] = []
+        for path, data in descriptions:
+            if data is None or "c_min_override" not in data:
+                results.append(_err("c-min-override", "missing-declaration", path))
+                continue
+            try:
+                values.add(validate_c_min_override(data["c_min_override"]))
+            except Invalid as exc:
+                results.append(_err(exc.rule, exc.key, path, **exc.params))
+        if len(values) > 1:
+            results.append(_err("c-min-override", "inconsistent", model_dir, values=sorted(values)))
+        if results:
+            return None, results
+        return next(iter(values)), []
+
     def _derive_regions(
         self,
         c_max: int | None,
@@ -913,8 +948,9 @@ class SubmissionChecker:
         point_dir_count: int,
         model_dir: Path,
         sd_path: Path | None,
+        c_min_override: int | None = None,
     ) -> tuple[Regions | None, list[CheckResult]]:
-        """Compute the curve's region boundaries from ``C_max`` and a derived ``C_min``.
+        """Compute boundaries from ``C_max`` and the declared or derived ``C_min``.
 
         Every point contributes to ``C_min``, including one whose ``point.yaml`` did
         not validate (its concurrency comes from the raw field or ``r<N>``). Leaving
@@ -932,6 +968,23 @@ class SubmissionChecker:
         if not concurrencies:
             results.append(_err("region-basis", "fail", model_dir))
             return None, results
+
+        if c_min_override is not None:
+            fixed_concurrencies = {
+                p.config.concurrency for p in loaded if p.config.offline != OFFLINE_DEDICATED
+            } | set(borrowed)
+            if c_min_override not in fixed_concurrencies:
+                results.append(
+                    _err("c-min-override", "missing-point", model_dir, c_min=c_min_override)
+                )
+                return None, results
+            try:
+                regions = compute_regions(c_max, c_min_override, c_min_overridden=True)
+            except Invalid as exc:
+                results.append(_err(exc.rule, exc.key, sd_path or model_dir, **exc.params))
+                return None, results
+            results.append(_ok("region-basis", "override", model_dir, c_min=c_min_override))
+            return regions, results
 
         lowest = min(concurrencies)
         # A curve with no Ultra Low Concurrency point still gets usable boundaries;
