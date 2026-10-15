@@ -77,6 +77,34 @@ class TestSubmissionsList:
 
 
 @pytest.mark.unit
+class TestSubmissionsListContents:
+    def _list(self, rows) -> str:
+        with patch("endpoints_submission_cli.submissions.api.list_submissions", return_value=rows):
+            with patch("endpoints_submission_cli._http.get_token", return_value=TOKEN):
+                result = _runner.invoke(
+                    app, ["submissions", "list", *_TOKEN_ARGS], env={"COLUMNS": "160"}
+                )
+        assert result.exit_code == 0, result.output
+        return result.output
+
+    def test_shows_each_submissions_systems_and_models(self) -> None:
+        row = {
+            **SUBMISSION_OUT,
+            "systems": ["B200", "GB300"],
+            "models": ["qwen3_6-35b-a3b"],
+        }
+        out = self._list([row])
+        assert "System" in out and "Model" in out
+        for name in ("B200", "GB300", "qwen3_6-35b-a3b"):
+            assert name in out
+
+    def test_an_api_without_them_shows_a_dash(self) -> None:
+        row = {k: v for k, v in SUBMISSION_OUT.items() if k not in ("systems", "models")}
+        out = self._list([row])
+        assert "System" in out
+
+
+@pytest.mark.unit
 class TestSubmissionsGet:
     def test_get_success(self) -> None:
         with patch(

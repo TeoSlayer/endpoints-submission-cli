@@ -27,6 +27,14 @@ def _publication_mode(submission: dict[str, Any]) -> str:
     return "Confidential, embargoed" if submission.get("embargo_date") else "Confidential"
 
 
+def _names(values: list[str] | None) -> str:
+    """A submission's systems or models, one per line; a dash when the API sent none.
+
+    Older APIs do not return them, so the column stays readable either way.
+    """
+    return "\n".join(values) if values else DASH
+
+
 def print_submissions_table(submissions: list[dict[str, Any]]) -> None:
     """Print a summary table of submission records (SubmissionOut schema)."""
     if not submissions:
@@ -39,6 +47,8 @@ def print_submissions_table(submissions: list[dict[str, Any]]) -> None:
     # doubling the row height; max_width stops the widened cell from starving the
     # other columns on a narrow terminal.
     table.add_column("Status", style="yellow", no_wrap=True, overflow="ellipsis", max_width=21)
+    table.add_column("System", style="green", overflow="fold")
+    table.add_column("Model", style="green", overflow="fold")
     table.add_column("Division")
     table.add_column("Availability")
     table.add_column("Runs", justify="right")
@@ -55,6 +65,8 @@ def print_submissions_table(submissions: list[dict[str, Any]]) -> None:
         table.add_row(
             fmt_str(sub.get("id")),
             status,
+            _names(sub.get("systems")),
+            _names(sub.get("models")),
             fmt_str(sub.get("division")),
             fmt_str(sub.get("availability")),
             str(len(run_ids)),
