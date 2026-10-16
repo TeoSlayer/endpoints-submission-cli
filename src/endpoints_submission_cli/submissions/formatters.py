@@ -28,11 +28,19 @@ def _publication_mode(submission: dict[str, Any]) -> str:
 
 
 def _names(values: list[str] | None) -> str:
-    """A submission's systems or models, one per line; a dash when the API sent none.
+    """A submission's systems or model/dataset pairs, one per line; a dash when none.
 
     Older APIs do not return them, so the column stays readable either way.
     """
     return "\n".join(values) if values else DASH
+
+
+def _model_datasets(pairs: list[dict[str, Any]] | None) -> list[str]:
+    """``model · dataset`` per pair; just the model for runs without a point.yaml."""
+    return [
+        f"{p['model']} · {p['dataset']}" if p.get("dataset") else str(p["model"])
+        for p in pairs or []
+    ]
 
 
 def print_submissions_table(submissions: list[dict[str, Any]]) -> None:
@@ -48,7 +56,7 @@ def print_submissions_table(submissions: list[dict[str, Any]]) -> None:
     # other columns on a narrow terminal.
     table.add_column("Status", style="yellow", no_wrap=True, overflow="ellipsis", max_width=21)
     table.add_column("System", style="green", overflow="fold")
-    table.add_column("Model", style="green", overflow="fold")
+    table.add_column("Model · Dataset", style="green", overflow="fold")
     table.add_column("Division")
     table.add_column("Availability")
     table.add_column("Runs", justify="right")
@@ -66,7 +74,7 @@ def print_submissions_table(submissions: list[dict[str, Any]]) -> None:
             fmt_str(sub.get("id")),
             status,
             _names(sub.get("systems")),
-            _names(sub.get("models")),
+            _names(_model_datasets(sub.get("model_datasets"))),
             fmt_str(sub.get("division")),
             fmt_str(sub.get("availability")),
             str(len(run_ids)),
