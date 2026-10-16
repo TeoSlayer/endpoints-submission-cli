@@ -77,6 +77,39 @@ class TestSubmissionsList:
 
 
 @pytest.mark.unit
+class TestSubmissionsListContents:
+    def _list(self, rows) -> str:
+        with patch("endpoints_submission_cli.submissions.api.list_submissions", return_value=rows):
+            with patch("endpoints_submission_cli._http.get_token", return_value=TOKEN):
+                result = _runner.invoke(
+                    app, ["submissions", "list", *_TOKEN_ARGS], env={"COLUMNS": "160"}
+                )
+        assert result.exit_code == 0, result.output
+        return result.output
+
+    def test_shows_each_submissions_systems_and_model_datasets(self) -> None:
+        row = {
+            **SUBMISSION_OUT,
+            "systems": ["B200", "GB300"],
+            "model_datasets": [
+                {"model": "qwen3_6-35b-a3b", "dataset": "agentic_coding"},
+                {"model": "deepseek-ai/DeepSeek-R1", "dataset": None},
+            ],
+        }
+        out = self._list([row])
+        assert "System" in out and "Model · Dataset" in out
+        for text in ("B200", "GB300", "qwen3_6-35b-a3b ·", "agentic_coding"):
+            assert text in out
+        # A run without a point.yaml has no dataset: the model alone.
+        assert "deepseek-ai/DeepSeek-R1" in out and "DeepSeek-R1 ·" not in out
+
+    def test_an_api_without_them_shows_a_dash(self) -> None:
+        row = {k: v for k, v in SUBMISSION_OUT.items() if k not in ("systems", "model_datasets")}
+        out = self._list([row])
+        assert "System" in out
+
+
+@pytest.mark.unit
 class TestSubmissionsGet:
     def test_get_success(self) -> None:
         with patch(
