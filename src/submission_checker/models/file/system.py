@@ -194,7 +194,7 @@ class SystemDescription(BaseModel):
     """Parsed contents of a point's ``system_desc.json`` (§8.2).
 
     Written into every ``r<N>/`` directory since policies PR #119; the points of one
-    curve must agree on everything but ``tps_utilization`` and the per-point
+    frontier must agree on everything but ``tps_utilization`` and the per-point
     deployment configuration (parallelism, ``batch``, ``config_summary``).
 
     Flat structure: org/system/model/dataset fields at the top level,
@@ -249,7 +249,7 @@ class SystemDescription(BaseModel):
     #: Dropped from §8.2 by policies PR #127, table and template both. Still read, so a
     #: bundle that carries it parses rather than failing on an unexpected field.
     link_config: str | None = None
-    #: ``system_tps / max(system_tps)`` over the point's own curve. A per-point value
+    #: ``system_tps / max(system_tps)`` over the point's own frontier. A per-point value
     #: in a file §8.2 calls a system description — raised with the WG; see
     #: :meth:`~submission_checker.checker.SubmissionChecker._check_tps_utilization`.
     tps_utilization: float | None = None

@@ -65,7 +65,7 @@ def _errors(ctx, rule: str):
 
 
 def _missing(ctx) -> list[str]:
-    """Messages of the one curve-level error naming the points without an inline score."""
+    """Messages of the one frontier-level error naming the points without an inline score."""
     return [r.message for r in _errors(ctx, "agentic-accuracy-inline") if r.key == "missing"]
 
 

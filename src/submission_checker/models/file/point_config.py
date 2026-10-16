@@ -240,7 +240,7 @@ class PointConfig(BaseModel):
         runtime_settings: Load pattern, duration, and client settings.
         warmup: §6.3.3 warmup declaration.
         division: Standardized, Serviced, or RDI.
-        max_supported_concurrency: The curve's declared ``C_max``.
+        max_supported_concurrency: The frontier's declared ``C_max``.
         model_name: Display name of the benchmark model.
         model_precision: Lowest precision numerical format used for the weights.
         link_to_model: Link to the submitted model.
@@ -319,10 +319,10 @@ class PointConfig(BaseModel):
     def is_agentic(self) -> bool:
         """True when this point declares the agentic load pattern (§6.1).
 
-        The benchmark type is a property of the *curve*, not of one point, so callers
+        The benchmark type is a property of the *frontier*, not of one point, so callers
         deciding a §5.3 or §5.7 question should use
         :attr:`~submission_checker.models.aggregate.ModelContext.is_agentic`, which
-        requires the curve's points to agree. This is the per-point signal it reads.
+        requires the frontier's points to agree. This is the per-point signal it reads.
         """
         return self.runtime_settings.load_pattern == LOAD_PATTERN_AGENTIC
 
@@ -332,7 +332,7 @@ class PointConfig(BaseModel):
 
         Only the vocabulary is checked here. Whether exactly one point declares it,
         and whether an `elected` point really is the C_max point, are properties of
-        the whole curve — see
+        the whole frontier — see
         :class:`~submission_checker.models.aggregate.ModelContext`.
         """
         path: Path | None = (info.context or {}).get("yaml_path")
@@ -649,7 +649,7 @@ class PointConfig(BaseModel):
         """§8.3: the declared region must be a value the spec defines.
 
         Only the vocabulary is checked here. Whether the declared region matches the
-        one computed for this concurrency is a property of the whole curve — the
+        one computed for this concurrency is a property of the whole frontier — the
         boundaries depend on ``C_min``, derived from every point — so that lives in
         :class:`~submission_checker.models.aggregate.RegionPlacement`.
         """

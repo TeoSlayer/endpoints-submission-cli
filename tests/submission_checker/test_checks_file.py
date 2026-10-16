@@ -99,7 +99,7 @@ class TestRegionDeclaredValidator:
     """PointConfig checks the region *vocabulary* only.
 
     Whether a declared region matches the concurrency depends on C_min, derived from
-    the whole curve (§5.4), so that lives in RegionPlacement — see
+    the whole frontier (§5.4), so that lives in RegionPlacement — see
     test_checks_aggregate.py::TestRegionPlacement.
     """
 

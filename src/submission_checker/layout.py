@@ -153,9 +153,9 @@ def iter_point_dirs(model_dir: Path) -> list[Path]:
 def iter_curves(results_dir: Path) -> Iterator[tuple[Path, Path]]:
     """Yield every ``(system_dir, model_dir)`` pair under *results_dir*.
 
-    One pair is one Pareto curve — §8.5 defines a result as "one system, one
+    One pair is one Pareto frontier — §8.5 defines a result as "one system, one
     benchmark model, one dataset". Region boundaries and TPS-utilisation
-    normalisation are both per curve, so both callers walk the tree this way.
+    normalisation are both per frontier, so both callers walk the tree this way.
     """
     if not results_dir.is_dir():
         return

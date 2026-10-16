@@ -711,9 +711,9 @@ class TestAgenticDetermination:
         assert _model_ctx(tmp_path, valid_points=pts).is_agentic
 
     def test_mixed_patterns_are_reported_and_read_as_single_turn(self, tmp_path: Path) -> None:
-        """§8.5 makes one curve one benchmark, so disagreement is an error.
+        """§8.5 makes one frontier one benchmark, so disagreement is an error.
 
-        The curve falls back to non-agentic: that keeps §5.7's Offline requirement in
+        The frontier falls back to non-agentic: that keeps §5.7's Offline requirement in
         force rather than letting one mislabelled point switch it off.
         """
         pts = [
@@ -751,7 +751,7 @@ class TestAgenticDetermination:
     def test_dedicated_offline_run_on_an_agentic_curve_is_still_read_as_agentic(
         self, tmp_path: Path
     ) -> None:
-        """§5.7 forbids it, so offline-point-present must see an agentic curve to say so."""
+        """§5.7 forbids it, so offline-point-present must see an agentic frontier to say so."""
         pts = [
             (tmp_path / "a.yaml", self._agentic(16)),
             (tmp_path / "b.yaml", self._agentic(64)),

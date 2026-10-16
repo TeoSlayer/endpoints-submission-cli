@@ -2,7 +2,7 @@
 
 These rules used to live on :class:`~submission_checker.models.file.PointConfig`,
 but v1.0 derives ``C_min`` from the submission's points (§5.4), so the region
-boundaries are a property of the whole curve rather than of any single file. That
+boundaries are a property of the whole frontier rather than of any single file. That
 makes this an aggregate check, which is what this package is for.
 """
 
@@ -20,7 +20,7 @@ __all__ = ["RegionPlacement"]
 
 
 class RegionPlacement(BaseModel):
-    """Validates one point's concurrency against its curve's region boundaries."""
+    """Validates one point's concurrency against its frontier's region boundaries."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

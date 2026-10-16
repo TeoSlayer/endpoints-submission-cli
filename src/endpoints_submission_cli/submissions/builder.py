@@ -155,7 +155,7 @@ def build_submission_folder(
     _write_documentation(submission_dir, run_data, shared_docs_dirs)
     shared_src = _sole_implementation_path(submission_dir)
 
-    # tps_utilization normalises each point against the peak of its own Pareto curve —
+    # tps_utilization normalises each point against the peak of its own Pareto frontier —
     # one system, one model (§8.5) — which is also how the checker recomputes it.
     # Normalising per model across systems would divide a small system's points by a
     # larger system's peak, so no submission with two systems could match its own file.
@@ -562,10 +562,10 @@ def _run_system_tps(run: dict[str, Any]) -> float | None:
 
 
 def _compute_max_tps(run_data: list[dict[str, Any]]) -> float | None:
-    """Return the max system TPS across a curve's runs, or None if underivable.
+    """Return the max system TPS across a frontier's runs, or None if underivable.
 
     This is the denominator of ``tps_utilization`` (§8.2), which normalises each
-    point against the peak of its own curve.
+    point against the peak of its own frontier.
     """
     values = [tps for tps in (_run_system_tps(run) for run in run_data) if tps is not None]
     return max(values) if values else None
@@ -603,13 +603,13 @@ def _write_point_dirs(
         seen.add(key)
         by_concurrency.setdefault(c, {})[run_type] = run
 
-    # Only the metadata written into the bundle defines the curve. A separate
+    # Only the metadata written into the bundle defines the frontier. A separate
     # accuracy donor does not replace its performance point's system description.
     primary_runs = [pair.get("performance") or pair["accuracy"] for pair in by_concurrency.values()]
     overrides = {r["system_info"].get("c_min_override") for r in primary_runs}
     if len(overrides) > 1:
         raise SubmissionBuildError(
-            f"Curve {system_id}/{model}: every point must omit c_min_override"
+            f"Frontier {system_id}/{model}: every point must omit c_min_override"
             " or declare the same value"
         )
     override = next(iter(overrides))
@@ -621,7 +621,7 @@ def _write_point_dirs(
         }
         if override not in concurrencies:
             raise SubmissionBuildError(
-                f"Curve {system_id}/{model}: c_min_override = {override}"
+                f"Frontier {system_id}/{model}: c_min_override = {override}"
                 " must match a submitted concurrency point"
             )
 
@@ -688,7 +688,7 @@ def _with_shared_pointers(point_yaml: bytes, submission_dir: Path, shared_src: s
     exist until the builder creates it. ``src/<impl>/`` is the union of every run's
     ``src/`` folder, so no single run archive can name it. The same principle already
     governs ``tps_utilization``, which :func:`_write_point_system_desc` fills in because
-    it is a function of the assembled curve. The rule is *the builder owns fields whose
+    it is a function of the assembled frontier. The rule is *the builder owns fields whose
     value is a function of the assembled bundle* — nothing more.
 
     Behaviour per key: validate if present, inject if absent, never overwrite. A
@@ -770,9 +770,9 @@ def _write_point_system_desc(
 
     Since policies PR #119 the system description is per point rather than one file
     per system, and it absorbed the fields that used to live in ``run_metadata.json``
-    — including ``tps_utilization``, which is a function of the whole curve
+    — including ``tps_utilization``, which is a function of the whole frontier
     (``system_tps / max(system_tps)``) and so can only be filled in here, once every
-    run in the curve has been read.
+    run in the frontier has been read.
     """
     system_desc = dict(run["system_info"])
     if max_tps and max_tps > 0:

@@ -581,7 +581,7 @@ class TestRegionalCoverageValidator:
 
 @pytest.mark.unit
 class TestRegionPlacement:
-    """The region-dependent point rules, which need the curve's derived C_min."""
+    """The region-dependent point rules, which need the frontier's derived C_min."""
 
     def _placement(self, tmp_path, concurrency, region=None, regions=_REGIONS):
         return RegionPlacement(

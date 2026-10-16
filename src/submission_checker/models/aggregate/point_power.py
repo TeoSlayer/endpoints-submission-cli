@@ -37,7 +37,7 @@ class Parallelism:
 
     §8.1 places ``system_desc.json`` in each point directory as the "framework /
     parallelism / precision for this point", and §4.5.3's worked example (C.3) changes
-    the replica size from point to point, so it is read per point, not per curve.
+    the replica size from point to point, so it is read per point, not per frontier.
     """
 
     tensor_parallel: int = 1

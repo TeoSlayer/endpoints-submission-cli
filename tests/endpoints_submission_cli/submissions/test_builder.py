@@ -1280,7 +1280,7 @@ class TestBuilderCheckerContract:
                 f"{py.name} unexpected errors: {[(r.rule, r.message) for r in errors]}"
             )
 
-    #: A curve covering every §9.1 region for C_max=1024 with a derived C_min=16:
+    #: A frontier covering every §9.1 region for C_max=1024 with a derived C_min=16:
     #: low 17–26 → 20, med 27–117 → 88, high 118–1024 → 256, 512, 768, 1000.
     #: The top point sits at C_max so it can be elected as the Offline result
     #: (§5.7.2 Option 2), which keeps the §5.3 minimum at 7 points.
@@ -1292,7 +1292,7 @@ class TestBuilderCheckerContract:
     def _curve_archive(
         self, run_folder: Path, tmp_path: Path, concurrency: int, system_tps: float
     ) -> Path:
-        """One point of a compliant curve, as a run archive."""
+        """One point of a compliant frontier, as a run archive."""
         import shutil
 
         name = f"run{concurrency}"
@@ -1355,7 +1355,7 @@ class TestBuilderCheckerContract:
         return archive
 
     def test_built_curve_passes_the_real_checker(self, run_folder: Path, tmp_path: Path) -> None:
-        """The closing loop: a compliant curve built by the builder must pass §9.1.
+        """The closing loop: a compliant frontier built by the builder must pass §9.1.
 
         Every other test here checks one field or one rule. This one asserts the two
         halves of the pipeline actually agree — the failure mode that motivated issue

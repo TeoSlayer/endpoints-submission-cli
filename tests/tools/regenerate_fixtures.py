@@ -17,7 +17,7 @@ What it does, per submission tree:
    fields are filled where missing: ``availability_url`` for an Available system,
    ``target_availability_date`` for a Preview one, and a ``shortened_system_name`` of at
    most 20 characters.
-3. **``tps_utilization`` recomputed** per Pareto curve as ``system_tps / max(system_tps)``
+3. **``tps_utilization`` recomputed** per Pareto frontier as ``system_tps / max(system_tps)``
    with ``system_tps`` derived from ``result_summary.json``, so the stored value agrees
    with the measurement the checker recomputes it from.
 4. **§8.3 disclosure added to every ``point.yaml``** — the ten §8.3 fields plus
@@ -197,7 +197,7 @@ def regenerate_submission(submission_dir: Path, seed_set: Any, *, dry_run: bool)
             if not dry_run:
                 legacy_desc_path.unlink()
 
-    # After the curves: _implementation_name reads the migrated system_desc.json.
+    # After the frontiers: _implementation_name reads the migrated system_desc.json.
     changes += _ensure_shared_trees(submission_dir, dry_run=dry_run)
     changes += _remove_stale_files(submission_dir, dry_run=dry_run)
     return changes
@@ -210,13 +210,13 @@ def _regenerate_curve(
     *,
     dry_run: bool,
 ) -> list[str]:
-    """Regenerate every point of one Pareto curve (§8.5: one system, one model)."""
+    """Regenerate every point of one Pareto frontier (§8.5: one system, one model)."""
     changes: list[str] = []
     point_dirs = layout.iter_point_dirs(model_dir)
     if not point_dirs:
         return changes
 
-    # tps_utilization normalises against the peak of this curve, so the whole curve
+    # tps_utilization normalises against the peak of this frontier, so the whole frontier
     # has to be read before any point can be written.
     summaries = {d: _read_json(d / layout.RESULT_SUMMARY_JSON) or {} for d in point_dirs}
     tps = {d: _derive_system_tps(s) for d, s in summaries.items()}
@@ -285,11 +285,11 @@ def _modernise_accuracy(point_dir: Path, model: str, *, dry_run: bool) -> list[s
 def _prune_accuracy(point_dirs: list[Path], desc: dict[str, Any], *, dry_run: bool) -> list[str]:
     """Keep exactly one accuracy result per mandatory point (§4.3, §5.3).
 
-    v0.7 ran accuracy at most points of a curve; v1.0 fixes the count at ``N`` — one
+    v0.7 ran accuracy at most points of a frontier; v1.0 fixes the count at ``N`` — one
     per mandatory band plus the Offline point — and rejects a result at a
     submitter's-choice point. The results kept are the ones the checker's own
     matching assigns to a band, plus the Offline point's; every other
-    ``accuracy_results.json`` is deleted. A curve the checker cannot compute regions
+    ``accuracy_results.json`` is deleted. A frontier the checker cannot compute regions
     for is left alone.
     """
     c_max = desc.get("max_supported_concurrency")
@@ -494,7 +494,7 @@ def _system_description_for(system_dir: Path, legacy_path: Path) -> dict[str, An
         for point_dir in layout.iter_point_dirs(model_dir):
             migrated = _read_json(point_dir / layout.SYSTEM_DESC_JSON)
             if migrated is not None:
-                # tps_utilization is per point; the curve loop sets it again.
+                # tps_utilization is per point; the frontier loop sets it again.
                 # Through _modernise_system_desc too, which is a no-op on a current
                 # description, so a step added later still reaches migrated trees.
                 return _modernise_system_desc(
@@ -659,7 +659,7 @@ def _write_point_yaml(
 
     # §5.7.2 Option 2: elect the C_max point as the Offline result. No separate run is
     # needed, so the §5.3 minimum stays at 7 and the fixtures keep their point counts.
-    # A curve with no point at C_max gets no declaration and fails offline-point-present,
+    # A frontier with no point at C_max gets no declaration and fails offline-point-present,
     # which is the correct report — §5.3 requires an Offline result either way.
     c_max = desc.get("max_supported_concurrency")
     if c_max is not None and concurrency == c_max:
