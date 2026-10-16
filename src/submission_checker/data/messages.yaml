@@ -129,7 +129,7 @@ agentic-accuracy:
   title: Agentic accuracy
   spec: §3.2
   messages:
-    warn: Agentic curve for model '{model_dir_name}', which is not one of the agentic benchmarks the reference
+    warn: Agentic frontier for model '{model_dir_name}', which is not one of the agentic benchmarks the reference
       implementation publishes thresholds for — no agentic accuracy gate applied
     warn-2: '{targets_name}: the reference implementation records its accuracy thresholds and SWE-bench
       evaluation policy as TBD, so no agentic accuracy gate can be applied to this submission'
@@ -417,7 +417,7 @@ offline-point-present:
       text: '{declared_count} points declare `offline` ({listed}); §5.7 allows exactly one'
       fix: Declare `offline` on exactly one point.
     fail-2: 'No point declares `offline`; §5.3 requires one for every non-agentic submission. An agentic
-      submission declares `runtime_settings.load_pattern: {load_pattern_agentic}`, which this curve does
+      submission declares `runtime_settings.load_pattern: {load_pattern_agentic}`, which this frontier does
       not'
     fail-3: Agentic benchmark declares an Offline point ({listed}); §5.7 says an agentic submission “neither
       requires nor may include” one
@@ -559,17 +559,17 @@ c-min-override:
   spec: §5.4
   messages:
     invalid: 'c_min_override must be a JSON integer in [1,32], got {value!r}'
-    missing-declaration: Every point on a curve must declare the same c_min_override or all must omit it
-    inconsistent: 'Conflicting c_min_override declarations on this curve: {values}'
-    missing-point: 'c_min_override = {c_min} must match a submitted concurrency point on this curve'
+    missing-declaration: Every point on a frontier must declare the same c_min_override or all must omit it
+    inconsistent: 'Conflicting c_min_override declarations on this frontier: {values}'
+    missing-point: 'c_min_override = {c_min} must match a submitted concurrency point on this frontier'
 region-basis:
   title: Region boundaries (C_min)
   spec: §5.4
   messages:
     warn: max_supported_concurrency could not be read from system_desc.json, so C_max is unknown and the
-      region-dependent checks were not run for this curve
+      region-dependent checks were not run for this frontier
     fail: No point's concurrency could be read — C_min cannot be derived, so no region-dependent check
-      can run for this curve
+      can run for this frontier
     warn-2: C_min = {c_min}{clamped} derived from {concurrencies_count} of {point_dir_count} points{note}
       — the rest have no readable concurrency
     pass: C_min = {c_min}{clamped} derived from all {point_dir_count} points{note}
@@ -750,7 +750,7 @@ system-description-consistency:
     pass: '{present_count} point(s) agree on the system description'
     fail:
       text: 'system_desc.json differs from {ref_path_parent_name}/ in: {differing} — every point of a
-        curve must describe the same system'
+        frontier must describe the same system'
       fix: Make every point's system_desc.json describe the same system; only the per-point fields (parallelism,
         batch, tps_utilization, config summary) may differ.
 system-description-present:
@@ -759,7 +759,7 @@ system-description-present:
   messages:
     fail:
       text: No readable system_desc.json under {rel}/
-      fix: Add a system_desc.json (§8.2) to every point directory of the curve.
+      fix: Add a system_desc.json (§8.2) to every point directory of the frontier.
     fail-2:
       text: Missing system_desc.json in {rel}/{point_dir_name}/
       fix: Add the system_desc.json (§8.2) for this point.
@@ -808,10 +808,10 @@ tps-utilization:
   messages:
     pass: tps_utilization {util:.4f} matches expected {expected:.4f}
     fail:
-      text: tps_utilization {util} != expected {expected:.4f} (system_tps {tps:.4f} / curve max {max_tps:.4f}
+      text: tps_utilization {util} != expected {expected:.4f} (system_tps {tps:.4f} / frontier max {max_tps:.4f}
         for {curve}; abs tol {tps_utilization_abs_tol})
       fix: 'Set tps_utilization in system_desc.json to {expected:.4f}: this point''s system_tps over the
-        curve''s highest.'
+        frontier''s highest.'
 ultra-low-concurrency-coverage:
   title: Ultra Low Concurrency coverage
   spec: §5.4

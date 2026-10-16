@@ -35,18 +35,18 @@ def _results(report: Report, rule: str, severity: Severity | None = None) -> lis
 
 
 def _curve_facts(submission: Path) -> tuple[int, list[int]]:
-    """The curve's declared C_max and its point concurrencies, read off disk."""
+    """The frontier's declared C_max and its point concurrencies, read off disk."""
     for _system, model_dir in layout.iter_curves(submission / layout.RESULTS_DIR):
         point_dirs = layout.iter_point_dirs(model_dir)
         desc = json.loads((point_dirs[0] / layout.SYSTEM_DESC_JSON).read_text())
         concurrencies = [layout.parse_point_dir(d.name) or 0 for d in point_dirs]
         return desc["max_supported_concurrency"], concurrencies
-    raise AssertionError(f"{submission} has no curve")
+    raise AssertionError(f"{submission} has no frontier")
 
 
-#: Every fixture tree, with the C_min the checker must derive for its first curve.
+#: Every fixture tree, with the C_min the checker must derive for its first frontier.
 #: C_min is the lowest submitted concurrency, clamped to 32 — §5.4 puts the Ultra Low
-#: Concurrency point at or below 32, so a curve starting higher still gets usable
+#: Concurrency point at or below 32, so a frontier starting higher still gets usable
 #: boundaries and is told separately that it misses the band.
 _DERIVATION_TABLE = [
     ("invalid_submission", 88, 16),
@@ -83,7 +83,7 @@ def test_reported_boundaries_match_the_derivation(
 
 
 def test_clamped_basis_says_so(sub_g: Path) -> None:
-    """A curve whose lowest point is above 32 must not silently get C_min = 64."""
+    """A frontier whose lowest point is above 32 must not silently get C_min = 64."""
     basis = _results(_check(sub_g), "region-basis")
     assert "C_min = 32" in basis[0].message
     assert "clamped from 64" in basis[0].message
@@ -159,7 +159,7 @@ class TestPartialAndAbsentBasis:
         assert _results(report, "point-count")
         # Per-point placement needs the parsed config, so it cannot run...
         assert not _results(report, "concurrency-in-range")
-        # ...but coverage only needs concurrencies, and the curve does cover each region.
+        # ...but coverage only needs concurrencies, and the frontier does cover each region.
         assert not _results(report, "low-concurrency-coverage", Severity.ERROR)
         # Each point says its own rules were skipped, so fixing it may report more.
         assert len(_results(report, "point-rules-skipped", Severity.WARNING)) == 7

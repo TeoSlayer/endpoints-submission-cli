@@ -118,7 +118,7 @@ class TestInvalidSubmission:
 # Fixture coverage expectations, re-derived under v1.0's per-submission regions.
 #
 # v0.7 fixed Low Concurrency at 33–42 regardless of the submission, so most of the
-# corpus skipped it. v1.0 derives the boundaries from each curve's own C_min, which
+# corpus skipped it. v1.0 derives the boundaries from each frontier's own C_min, which
 # moves the window down to wherever the submitter's points actually start — and eight
 # of these ten trees now cover it. The three that still miss it are the ones whose
 # points start high relative to C_max.
@@ -407,7 +407,7 @@ class TestCheckerEdgeCases:
         assert _errors(report, "system-description-valid")
 
     def test_system_desc_inconsistent_across_curve(self, tmp_path):
-        """§8.5: every point of a curve must describe the same system."""
+        """§8.5: every point of a frontier must describe the same system."""
         root = _build_submission(tmp_path)
         changed = root / "results" / "test-sys" / "llama3-70b" / "r88" / "system_desc.json"
         changed.write_text(json.dumps({**_SYSTEM_DESC, "system_name": "a-different-system"}))
@@ -504,7 +504,7 @@ class TestCheckerEdgeCases:
         assert _errors(report, "tps-utilization")
 
     def _add_curve(self, root, system_id, model, values: dict[int, tuple[float, float]]):
-        """Add a second <system_id>/<model> pareto curve with per-point (tps, util)."""
+        """Add a second <system_id>/<model> Pareto frontier with per-point (tps, util)."""
         model_dir = root / "results" / system_id / model
         model_dir.mkdir(parents=True, exist_ok=True)
         duration_s = _SUMMARY["duration_ns"] / 1e9
@@ -525,7 +525,7 @@ class TestCheckerEdgeCases:
             (rd / "accuracy_results.json").write_text(json.dumps(_ACCURACY))
 
     def test_tps_utilization_normalized_per_curve(self, tmp_path):
-        """Each system/model curve normalizes to its OWN peak, not a submission-wide max.
+        """Each system/model frontier normalizes to its OWN peak, not a submission-wide max.
 
         Regression test: a small system (peak 200) alongside a large one (peak 2000)
         must not be forced to divide by the large system's peak. With the old
@@ -539,7 +539,7 @@ class TestCheckerEdgeCases:
         assert any(r.rule == "tps-utilization" for r in report.results)
 
     def test_tps_utilization_per_curve_detects_error(self, tmp_path):
-        """A wrongly-normalized value is still caught within its own curve."""
+        """A wrongly-normalized value is still caught within its own frontier."""
         root = _build_submission(tmp_path, system_id="sys-small", concurrencies=[16, 20])
         self._set_tps(root, {16: (100.0, 0.5), 20: (200.0, 1.0)})  # correct
         # sys-big point 16 expects 0.5 but stores 0.9 (off by 0.4 > tol)
@@ -757,7 +757,7 @@ class TestCheckerEdgeCases:
         assert not [r for r in report.results if r.rule == "model-name-valid"]
 
     def test_points_disagreeing_on_model_error(self, tmp_path):
-        """§9.1 "Configuration consistency": one curve is one benchmark model."""
+        """§9.1 "Configuration consistency": one frontier is one benchmark model."""
         root = _build_submission(tmp_path, model="gpt-oss-120b")
         stray = next((root / "results" / "test-sys" / "gpt-oss-120b").glob("r*/point.yaml"))
         data = yaml.safe_load(stray.read_text())

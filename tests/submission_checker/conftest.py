@@ -56,7 +56,7 @@ _NODE_TYPE = {
 }
 
 _C_MAX = 1024
-#: C_min is derived from a curve's own points (§5.4); 32 reproduces the v0.7 fixed
+#: C_min is derived from a frontier's own points (§5.4); 32 reproduces the v0.7 fixed
 #: boundaries (33–42 / 43–131 / 132–1024), so the layout-coupled fixtures stay valid.
 _C_MIN = 32
 _REGIONS = compute_regions(_C_MAX, _C_MIN)

@@ -321,11 +321,11 @@ submission root (§9.1).
 |------|------|-------------|
 | `system-description-present` | §8.2 | Every point has a `system_desc.json` |
 | `system-description-valid` | §8.2 | It parses against the `SystemDescription` schema |
-| `system-description-consistency` | §8.5 | Every point of a curve describes the same system (parallelism, `batch` and `config_summary` may vary by point) |
+| `system-description-consistency` | §8.5 | Every point of a frontier describes the same system (parallelism, `batch` and `config_summary` may vary by point) |
 | `model-name-valid` | §3.2 | `point.yaml`'s `model_name` is exactly one of the round's supported models, spelled canonically |
 | `model-name-consistency` | §8.1 | It is exactly the results directory name |
 | `max-concurrency-declared` | §7 | `max_supported_concurrency` (C_max) present and > 32 |
-| `tps-utilization` | §8.2 | Equals `system_tps / max(system_tps)` over the point's own curve |
+| `tps-utilization` | §8.2 | Equals `system_tps / max(system_tps)` over the point's own frontier |
 | `power-descriptor` | §4.5.2, App. E | `system_power.json` present per system and valid under Appendix E.7; optional for RDI and Serviced |
 | `power-estimated` | §4.5.2, App. D | "MLC Estimated Power": an Appendix D value reaches the total (warn) |
 
@@ -447,8 +447,8 @@ By default, `C_min` is derived from the lowest submitted concurrency and Ultra L
 Concurrency coverage remains 1–32. Following policies PR #150, submitters may instead
 set top-level `"c_min_override": 32` (for example) in each point's `system_desc.json`.
 The override must be a JSON integer from 1 through 32 matching a submitted concurrency
-point. Every point on a system/model curve must declare the same value, or all must
-omit it; `null`, strings, floats, and booleans are invalid. Different curves may use
+point. Every point on a system/model frontier must declare the same value, or all must
+omit it; `null`, strings, floats, and booleans are invalid. Different frontiers may use
 different values. The CLI preserves declarations when building bundles and rejects
 inconsistent or unmeasured overrides.
 
@@ -479,7 +479,7 @@ validation by the service or reviewers.
 | `med-concurrency-coverage` | §9.1 | At least one point in the Medium Concurrency region |
 | `high-concurrency-coverage` | §9.1 | At least one point in the High Concurrency region |
 | `point-count` | §5.3 | 7–32 measurement points; 8 with a dedicated Offline run; 7 for an agentic benchmark |
-| `benchmark-type-consistency` | §6.1, §8.5 | Every point on a curve declares the same `load_pattern`, since one curve is one benchmark |
+| `benchmark-type-consistency` | §6.1, §8.5 | Every point on a frontier declares the same `load_pattern`, since one frontier is one benchmark |
 | `point-cap` | §2, §8 | Point count does not exceed 32 |
 
 ### Measurement points (§8.3, §6)
@@ -594,8 +594,8 @@ runtime_settings:
   load_pattern: agentic_inference
 ```
 
-A curve is one benchmark (§8.5), so every point must agree; `benchmark-type-consistency`
-reports points that do not, and a curve that disagrees is read as single-turn, which
+A frontier is one benchmark (§8.5), so every point must agree; `benchmark-type-consistency`
+reports points that do not, and a frontier that disagrees is read as single-turn, which
 keeps the Offline requirement in force rather than letting one mislabelled point switch
 it off.
 
@@ -638,7 +638,7 @@ Both agentic scorers report a fraction in [0, 1], which is always rescaled to a
 percentage; a value outside that range is an error, never read as a percentage already.
 The SWE-bench mean takes one value per mandatory band: a result outside the four bands
 is left out, and a band with several results is averaged into one value, with a warning
-(`accuracy-coverage` rejects such a curve in any case).
+(`accuracy-coverage` rejects such a frontier in any case).
 
 ## Programmatic API
 

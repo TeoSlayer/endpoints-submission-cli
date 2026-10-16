@@ -93,7 +93,7 @@ endpoints-submission-cli submissions create \
 
 To override the lower concurrency boundary, include `"c_min_override": 32` (for example)
 in each performance point's `system_desc.json` before registering the runs. Use the same
-integer from 1 through 32 for every point on a system/model curve, and include a point
+integer from 1 through 32 for every point on a system/model frontier, and include a point
 at that concurrency. The builder preserves the declaration; separate accuracy donors do
 not replace a performance point's metadata. Omit the field everywhere to retain default
 C_min derivation and Ultra Low Concurrency coverage of 1–32. With an override, that region

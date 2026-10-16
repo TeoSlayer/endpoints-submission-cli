@@ -126,7 +126,7 @@ class ModelContext(BaseModel):
     _check_results: list[CheckResult] = PrivateAttr(default_factory=list)
 
     system_id: str
-    #: ``None`` when the curve's ``system_desc.json`` did not validate. The curve is
+    #: ``None`` when the frontier's ``system_desc.json`` did not validate. The frontier is
     #: still checked; only the rules that compare against ``C_max`` need it, and they
     #: fall back to :attr:`raw_c_max`.
     system_desc: SystemDescription | None
@@ -173,21 +173,21 @@ class ModelContext(BaseModel):
 
     @property
     def is_agentic(self) -> bool:
-        """Whether this curve measures an agentic benchmark (§6.1's load pattern).
+        """Whether this frontier measures an agentic benchmark (§6.1's load pattern).
 
         The benchmark type governs four §9.1 rows but §8.3 has no field for it, so it
         is read from ``runtime_settings.load_pattern``: the reference implementation
         names its fixed-concurrency agentic scheduler ``agentic_inference``, and that
         name is the only agentic signal in any file this checker reads.
 
-        A curve is one benchmark (§8.5: "one system, one benchmark model, one
+        A frontier is one benchmark (§8.5: "one system, one benchmark model, one
         dataset"), so this requires unanimity. Points that disagree are reported by
-        ``benchmark-type-consistency`` and the curve is treated as non-agentic — the
+        ``benchmark-type-consistency`` and the frontier is treated as non-agentic — the
         stricter reading, since it keeps the Offline requirement in force rather than
         letting one mislabelled point switch it off.
 
         A dedicated Offline run is left out of the vote (see
-        :attr:`_type_voting_points`), so an agentic curve that wrongly includes one is
+        :attr:`_type_voting_points`), so an agentic frontier that wrongly includes one is
         still read as agentic, and ``offline-point-present`` rejects it under §5.7.
         """
         patterns = {c.runtime_settings.load_pattern for _, c in self._type_voting_points}
@@ -200,7 +200,7 @@ class ModelContext(BaseModel):
         §6.1 gives the Offline point its own pattern — "It is the only point for which
         the fixed-concurrency pattern is not used" — and the reference implementation
         names it ``max_throughput``. A dedicated Offline run therefore disagrees with
-        the rest of a correct single-turn curve by design, and says nothing about the
+        the rest of a correct single-turn frontier by design, and says nothing about the
         benchmark type. An *elected* point is an ordinary fixed-concurrency run, so it
         still votes.
         """
@@ -208,10 +208,10 @@ class ModelContext(BaseModel):
 
     @model_validator(mode="after")
     def _check_benchmark_type_consistency(self) -> ModelContext:
-        """§8.5: one curve is one benchmark, so its points must agree on the type.
+        """§8.5: one frontier is one benchmark, so its points must agree on the type.
 
         Only :attr:`_type_voting_points` are compared: §6.1 expects a dedicated Offline
-        run to use a different pattern from the rest of its curve.
+        run to use a different pattern from the rest of its frontier.
         """
         if not self._type_voting_points:
             return self
@@ -239,7 +239,7 @@ class ModelContext(BaseModel):
 
     @property
     def min_points(self) -> int:
-        """§5.3's minimum for this curve, which depends on how Offline is satisfied.
+        """§5.3's minimum for this frontier, which depends on how Offline is satisfied.
 
         A dedicated Offline run is an extra point on top of the seven, so the minimum
         is 8. Electing the C_max point adds no run, so it stays at 7 — as does an
@@ -277,7 +277,7 @@ class ModelContext(BaseModel):
         The requirement inverts for agentic benchmarks. §5.7: "An agentic submission
         neither requires nor may include an Offline point", and §9.1 asks for "exactly
         one … for non-agentic benchmarks; none is present for agentic benchmarks". So
-        an agentic curve is checked for *absence*, and a declaration on one is an
+        an agentic frontier is checked for *absence*, and a declaration on one is an
         error rather than the thing being required.
 
         Which branch applies comes from :attr:`is_agentic`.
@@ -546,7 +546,7 @@ class ModelContext(BaseModel):
 
     @model_validator(mode="after")
     def _check_config_consistency(self) -> ModelContext:
-        """§9.1 "Configuration consistency": one curve, one dataset and one model.
+        """§9.1 "Configuration consistency": one frontier, one dataset and one model.
 
         The model is checked over ``valid_points`` rather than ``loaded_points``: a
         point whose ``result_summary.json`` failed to load still made a §8.3 disclosure,
@@ -623,7 +623,7 @@ class ModelContext(BaseModel):
 
         The four mandatory bands are checked the same way either way; N differs only
         because the Offline row below iterates ``offline_points``, which an agentic
-        curve has none of. The pass message names the applicable N so a reviewer can
+        frontier has none of. The pass message names the applicable N so a reviewer can
         see which reading was applied.
         """
         if self.regions is None or not self._present_concurrencies:
@@ -724,7 +724,7 @@ class ModelContext(BaseModel):
 
         Three quantities, aggregated three different ways — see
         :mod:`submission_checker.agentic_targets` for why they cannot share the
-        single-turn gate. Runs only for an agentic curve whose model the reference
+        single-turn gate. Runs only for an agentic frontier whose model the reference
         implementation names.
         """
         if not self.is_agentic:
@@ -817,8 +817,8 @@ class ModelContext(BaseModel):
         The rules name no tiebreak for a band with two results; submitter's-choice
         points share bands with the mandatory ones and look the same on disk. Picking
         one would let a submitter choose which result counts, so those results are
-        averaged into one value for the band, and the curve is warned about it.
-        ``accuracy-coverage`` rejects such a curve anyway (§4.3 allows one per band);
+        averaged into one value for the band, and the frontier is warned about it.
+        ``accuracy-coverage`` rejects such a frontier anyway (§4.3 allows one per band);
         averaging only keeps this gate's verdict independent of that one.
 
         A short set is still gated, on the mean of the bands present, and said to be
@@ -977,7 +977,7 @@ class ModelContext(BaseModel):
         if self.is_agentic and get_agentic_targets(self.model_dir.name) is not None:
             return self  # gated by _check_agentic_accuracy, which aggregates differently
         if get_thresholds(self.model_dir.name) is None:
-            # A fact about the model, so said once for the curve rather than once for
+            # A fact about the model, so said once for the frontier rather than once for
             # every point that carries accuracy.
             self._check_results.append(
                 warn("accuracy-gate", "no-thresholds", self.model_dir, model=self.model_dir.name)
@@ -996,7 +996,7 @@ class ModelContext(BaseModel):
         )
         target = get_thresholds(self.model_dir.name)
         if target is None:
-            return  # reported once for the curve by _check_accuracy
+            return  # reported once for the frontier by _check_accuracy
         thresholds, min_queries = target
         root = accuracy_result.root
 

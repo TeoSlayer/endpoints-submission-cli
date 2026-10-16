@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Speculative-decoding drafters (§2.9.4) — approval and lead time.
 
-§9.1 adds two checks, both per point but both needing the curve's ``target_cohort``
+§9.1 adds two checks, both per point but both needing the frontier's ``target_cohort``
 and benchmark, so they live here rather than on :class:`PointConfig`.
 """
 
@@ -21,7 +21,7 @@ __all__ = ["DrafterBinding"]
 
 
 class DrafterBinding(BaseModel):
-    """Validates a curve's speculative-decoding disclosures against the approved list."""
+    """Validates a frontier's speculative-decoding disclosures against the approved list."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -29,11 +29,11 @@ class DrafterBinding(BaseModel):
 
     #: ``(point.yaml path, parsed config)`` for every point whose config loaded.
     points: list[tuple[Path, PointConfig]]
-    #: Approved drafters for this curve's benchmark (§2.9.4). Empty means none are.
+    #: Approved drafters for this frontier's benchmark (§2.9.4). Empty means none are.
     approved: list[ApprovedDrafter]
-    #: The benchmark model this curve measures, for messages.
+    #: The benchmark model this frontier measures, for messages.
     benchmark: str
-    #: The curve directory, used as the path for curve-wide findings.
+    #: The frontier directory, used as the path for frontier-wide findings.
     model_dir: Path
 
     @property

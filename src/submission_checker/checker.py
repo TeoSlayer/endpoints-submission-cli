@@ -107,7 +107,7 @@ def _results_has_accuracy_scores(path: Path) -> bool:
     )
 
 
-#: Fields of ``system_desc.json`` allowed to differ between points of one curve.
+#: Fields of ``system_desc.json`` allowed to differ between points of one frontier.
 #: ``tps_utilization`` is a per-point quantity that §8.2 nonetheless places in the
 #: system description — worth raising with the WG, but not a submission defect.
 #:
@@ -153,7 +153,7 @@ class _UnparsedPoint:
 
     It is still a point: it counts toward ``C_min`` and coverage, and its other files
     are still checked, so one bad field does not hide the rest of the point or shift
-    the curve's region boundaries. ``concurrency`` comes from the raw YAML when that
+    the frontier's region boundaries. ``concurrency`` comes from the raw YAML when that
     field is readable, else from the ``r<N>`` directory name, which
     ``point-dirname-concurrency`` already requires to agree with it.
     """
@@ -185,7 +185,7 @@ class _SystemFacts:
 
 
 def _system_desc_identity(data: dict[str, object]) -> dict[str, object]:
-    """Strip the fields that legitimately vary between points of the same curve."""
+    """Strip the fields that legitimately vary between points of the same frontier."""
     return {k: v for k, v in data.items() if k not in _PER_POINT_SYSTEM_DESC_FIELDS}
 
 
@@ -233,7 +233,7 @@ def _derived_system_tps(summary_path: Path) -> float | None:
 
     Mirrors :attr:`~submission_checker.models.PointSummary.system_tps` but reads the
     raw JSON, so a summary that fails full validation still contributes its
-    throughput to the curve's peak rather than silently shrinking the denominator.
+    throughput to the frontier's peak rather than silently shrinking the denominator.
     """
     data = _read_json(summary_path)
     if data is None:
@@ -390,7 +390,7 @@ class SubmissionChecker:
         report.results.extend(submission_dir._check_results)
 
         # src/ is shared by the whole submission (§2.2.1), so it is checked once here
-        # rather than per curve, and whatever else is missing.
+        # rather than per frontier, and whatever else is missing.
         report.results.extend(SrcDir(root=self.submission_path)._check_results)
 
         # Only a missing results/ leaves nothing further to check. A missing docs/
@@ -410,8 +410,8 @@ class SubmissionChecker:
         for system_dir in system_dirs:
             report.results.extend(self._check_system(system_dir))
 
-        # Per-curve: tps_utilization must match system_tps / max(system_tps)
-        # within each <system>/<benchmark_model> pareto curve.
+        # Per-frontier: tps_utilization must match system_tps / max(system_tps)
+        # within each <system>/<benchmark_model> Pareto frontier.
         report.results.extend(self._check_tps_utilization(results_dir))
 
         # §15: at least one model must carry accuracy results — either as accuracy_scores
@@ -435,11 +435,11 @@ class SubmissionChecker:
         """Verify each point's ``tps_utilization`` equals ``system_tps / max(system_tps)``.
 
         ``tps_utilization`` normalises a point to the peak ``system_tps`` of the
-        system+model curve it belongs to — NOT across the whole submission.
+        system+model frontier it belongs to — NOT across the whole submission.
         Normalising submission-wide is wrong when a submission contains more than
         one system: e.g. an ``MI355X_1x`` and an ``MI355X_8x`` config sharing a
         folder would force every 1x point to be divided by the 8x peak, so the
-        smaller system can never match its stored (per-curve) values.
+        smaller system can never match its stored (per-frontier) values.
 
         The stored value lives in the point's ``system_desc.json`` (§8.2 absorbed it
         when policies PR #119 removed ``run_metadata.json``), while ``system_tps`` is
@@ -497,7 +497,7 @@ class SubmissionChecker:
 
         The system description is no longer a per-system file, so a system contributes
         no checks of its own beyond holding at least one benchmark-model directory;
-        everything else is per curve.
+        everything else is per frontier.
         """
         results: list[CheckResult] = []
         system_id = system_dir.name
@@ -521,7 +521,7 @@ class SubmissionChecker:
 
         The system description is per point since policies PR #119, but §8.2 describes
         one system, and ``system-description-consistency`` already reports points of a
-        curve that disagree. So the first readable one answers the question.
+        frontier that disagree. So the first readable one answers the question.
 
         §8.2's table lists ``cooling`` as a system field while §8.2.1's template nests
         it under ``node_types``, so both placements are read. Node types cooled
@@ -663,7 +663,7 @@ class SubmissionChecker:
     def _check_model(
         self, system_id: str, model_dir: Path, power: PowerComputation | None = None
     ) -> list[CheckResult]:
-        """Run every check scoped to one Pareto curve (§8.5: one system, one model).
+        """Run every check scoped to one Pareto frontier (§8.5: one system, one model).
 
         Two-phase, because v1.0 derives ``C_min`` from the submitted points (§5.4)
         rather than taking it as a declaration: phase one parses every ``point.yaml``
@@ -688,7 +688,7 @@ class SubmissionChecker:
         if not loaded and not point_dirs:
             return results
 
-        # An invalid system description is reported, not fatal: the curve's other
+        # An invalid system description is reported, not fatal: the frontier's other
         # checks do not depend on it, and C_max can still come from the raw field.
         system_desc, sd_path, sd_results = self._load_curve_system_desc(point_dirs, model_dir)
         results.extend(sd_results)
@@ -837,9 +837,9 @@ class SubmissionChecker:
     def _load_curve_system_desc(
         self, point_dirs: list[Path], model_dir: Path
     ) -> tuple[SystemDescription | None, Path | None, list[CheckResult]]:
-        """Load the curve's system description from its points' ``system_desc.json``.
+        """Load the frontier's system description from its points' ``system_desc.json``.
 
-        Every point carries its own copy since policies PR #119, so the curve's
+        Every point carries its own copy since policies PR #119, so the frontier's
         description is whichever they agree on — and disagreeing on anything but
         :data:`_PER_POINT_SYSTEM_DESC_FIELDS` means the points do not describe one
         system, which §8.5 requires. Only the first copy is schema-validated: once the
@@ -885,7 +885,7 @@ class SubmissionChecker:
     def _check_system_desc_consistency(
         self, present: list[tuple[Path, dict[str, object]]], model_dir: Path
     ) -> list[CheckResult]:
-        """§8.5: every point of a curve must describe the same system."""
+        """§8.5: every point of a frontier must describe the same system."""
         ref_path, ref_data = present[0]
         ref_identity = _system_desc_identity(ref_data)
         for sd_path, data in present[1:]:
@@ -987,7 +987,7 @@ class SubmissionChecker:
             return regions, results
 
         lowest = min(concurrencies)
-        # A curve with no Ultra Low Concurrency point still gets usable boundaries;
+        # A frontier with no Ultra Low Concurrency point still gets usable boundaries;
         # ModelContext reports the missing coverage as its own error.
         c_min = min(lowest, ULTRA_LOW_CONCURRENCY_MAX)
         clamped = "" if c_min == lowest else f" (clamped from {lowest})"
@@ -1042,7 +1042,7 @@ class SubmissionChecker:
         loaded_points: list[tuple[PointConfig, PointSummary]],
         power: PowerComputation | None = None,
     ) -> list[CheckResult]:
-        """Run the per-point rules that need the curve's regions or its result summary.
+        """Run the per-point rules that need the frontier's regions or its result summary.
 
         Appends to *loaded_points* as a side effect so :class:`ModelContext` sees every
         point whose config and summary both loaded.
@@ -1167,10 +1167,10 @@ class SubmissionChecker:
 
         §5.3 moved accuracy from one run per submission to ``N`` points — the four
         mandatory concurrency points plus the Offline point — so the first usable
-        result no longer stands in for the curve and each point is loaded on its own.
+        result no longer stands in for the frontier and each point is loaded on its own.
 
         Args:
-            points: ``(point directory, concurrency)`` for every point of the curve,
+            points: ``(point directory, concurrency)`` for every point of the frontier,
                 including those whose ``point.yaml`` did not validate.
 
         Returns:
@@ -1208,7 +1208,7 @@ class SubmissionChecker:
         return by_concurrency, first_dir, results
 
     # ------------------------------------------------------------------
-    # Per-curve system-description rules
+    # Per-frontier system-description rules
     # ------------------------------------------------------------------
 
     def _check_model_name(self, loaded: list[_LoadedPoint]) -> list[CheckResult]:
@@ -1223,7 +1223,7 @@ class SubmissionChecker:
         name that only matches once canonicalised is still an error, and the message
         says which spelling to use instead.
 
-        Reported per distinct name rather than per point, so a curve of 32 points does
+        Reported per distinct name rather than per point, so a frontier of 32 points does
         not produce 32 identical lines. Whether the points agree is
         ``config-consistency-model``'s question; absence is
         ``point-disclosure-complete``'s, so a point with no name is skipped here rather

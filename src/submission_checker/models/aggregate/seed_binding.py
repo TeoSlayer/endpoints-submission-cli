@@ -1,4 +1,4 @@
-"""Seed binding — §4.6 seed rotation, checked across one Pareto curve.
+"""Seed binding — §4.6 seed rotation, checked across one Pareto frontier.
 
 §9.1's "Seed-set validity" row makes this a property of the whole submission, not of
 one file: "every point must record the same seed set, and that set must have been
@@ -21,7 +21,7 @@ __all__ = ["SeedBinding"]
 
 
 class SeedBinding(BaseModel):
-    """Validates one curve's seed declarations against the published seed sets."""
+    """Validates one frontier's seed declarations against the published seed sets."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -31,7 +31,7 @@ class SeedBinding(BaseModel):
     points: list[tuple[Path, PointConfig]]
     #: The published sets, keyed by id — see :func:`submission_checker.seed_sets.load_seed_sets`.
     registry: dict[str, SeedSet]
-    #: The curve directory, used as the path for curve-wide findings.
+    #: The frontier directory, used as the path for frontier-wide findings.
     model_dir: Path
 
     @property

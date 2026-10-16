@@ -54,7 +54,7 @@ class PointResult(BaseModel):
         basis and what §4.4 calls the fallback result.
 
         Agentic points take §6.2's agentic table (2,400 s above Ultra Low Concurrency).
-        The point's own load pattern decides; a curve whose points disagree is
+        The point's own load pattern decides; a frontier whose points disagree is
         reported by ``benchmark-type-consistency``.
         """
         regions = (info.context or {}).get("regions")

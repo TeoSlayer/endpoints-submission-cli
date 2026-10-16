@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2024 MLCommons
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for SeedBinding — §4.6 seed rotation, checked across a Pareto curve."""
+"""Tests for SeedBinding — §4.6 seed rotation, checked across a Pareto frontier."""
 
 from __future__ import annotations
 

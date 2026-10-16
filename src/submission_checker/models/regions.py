@@ -150,7 +150,7 @@ def validate_c_min_override(value: object) -> int:
 
 
 def compute_regions(c_max: int, c_min: int, *, c_min_overridden: bool = False) -> Regions:
-    """Compute region boundaries from a curve's ``C_max`` and ``C_min``.
+    """Compute region boundaries from a frontier's ``C_max`` and ``C_min``.
 
     The reference algorithm from §5.5, using banker's rounding (Python's built-in
     ``round()``).
