@@ -105,6 +105,18 @@ class TestExtractArchive:
 
 @pytest.mark.unit
 class TestBuildSubmissionFolder:
+    @pytest.mark.parametrize("name", ["absolute", "../escaped", "..", "nested/system", r"nested\system", "C:drive"])
+    def test_rejects_system_names_that_can_change_output_paths(
+        self, run_folder: Path, tmp_path: Path, name: str
+    ) -> None:
+        system_name = str(tmp_path / "escaped") if name == "absolute" else name
+        archive = self._archive_with_desc(run_folder, tmp_path, system_name=system_name)
+        with pytest.raises(SubmissionBuildError, match="system_name"):
+            build_submission_folder(
+                [("run", archive)], "standardized", "available", tmp_path / "output"
+            )
+        assert not (tmp_path / "escaped").exists()
+
     def test_builds_under_pending_submission_id(self, run_archive: Path, tmp_path: Path) -> None:
         """Without an id the tree is built under the placeholder level."""
         org_dir = build_submission_folder(

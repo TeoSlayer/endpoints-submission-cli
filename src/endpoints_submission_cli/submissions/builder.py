@@ -497,7 +497,12 @@ def _group_runs(
 
 def _extract_system_id(system_info: dict[str, Any]) -> str:
     sd = SystemDescription.model_validate(system_info)
-    return sd.system_name.strip().replace(" ", "_")
+    name = sd.system_name.strip().replace(" ", "_")
+    if not name or name in {".", ".."} or any(char in name for char in ("/", "\\", ":", "\0")):
+        raise SubmissionBuildError(
+            "system_name must be a single directory name without path separators or a drive prefix"
+        )
+    return name
 
 
 def _extract_model(config: dict[str, Any], point_config: dict[str, Any]) -> str:
