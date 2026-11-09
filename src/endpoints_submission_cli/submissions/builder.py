@@ -241,9 +241,24 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     try:
         with tarfile.open(archive_path, "r:gz") as tar:
-            # Security: filter absolute paths and path traversal
-            members = [m for m in tar.getmembers() if not m.name.startswith("/")]
-            tar.extractall(dest_dir, members=members)
+            # Validate the whole archive before writing anything. Run archives
+            # contain only files/directories; links and special files are not needed.
+            root = dest_dir.resolve()
+            members = tar.getmembers()
+            for member in members:
+                target = (root / member.name).resolve()
+                if (
+                    Path(member.name).is_absolute()
+                    or (target != root and root not in target.parents)
+                    or not (member.isfile() or member.isdir())
+                ):
+                    raise tarfile.TarError(f"Unsafe archive member: {member.name}")
+            # Keep the validation above for older supported Python patch releases
+            # without extraction filters, and use the data filter where available.
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(dest_dir, members=members, filter="data")
+            else:
+                tar.extractall(dest_dir, members=members)
     except (tarfile.TarError, OSError) as exc:
         raise SubmissionBuildError(f"Failed to extract {archive_path}: {exc}") from exc
 

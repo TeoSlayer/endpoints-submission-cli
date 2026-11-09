@@ -4,14 +4,17 @@
 
 from __future__ import annotations
 
+import io
 import json
 import tarfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 
 from endpoints_submission_cli.exceptions import SubmissionBuildError, TruncationError
+from endpoints_submission_cli.submissions import builder
 from endpoints_submission_cli.submissions.builder import (
     PENDING_SUBMISSION_ID,
     _compute_max_tps,
@@ -37,6 +40,50 @@ def _submission_root(org_dir: Path) -> Path:
 
 @pytest.mark.unit
 class TestExtractArchive:
+    @pytest.mark.parametrize("kind", ["parent", "absolute", "symlink", "hardlink", "fifo"])
+    @pytest.mark.parametrize("legacy", [False, True])
+    def test_rejects_unsafe_members_before_extracting_anything(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, legacy: bool
+    ) -> None:
+        if legacy:
+            monkeypatch.setattr(
+                builder, "tarfile", SimpleNamespace(open=tarfile.open, TarError=tarfile.TarError)
+            )
+        archive = tmp_path / "unsafe.tar.gz"
+        escaped = tmp_path / "escaped"
+        with tarfile.open(archive, "w:gz") as tar:
+            valid = tarfile.TarInfo("valid")
+            valid.size = 2
+            tar.addfile(valid, io.BytesIO(b"ok"))
+            member = tarfile.TarInfo(str(escaped) if kind == "absolute" else "../escaped")
+            if kind in {"symlink", "hardlink"}:
+                member.name = "link"
+                member.type = tarfile.SYMTYPE if kind == "symlink" else tarfile.LNKTYPE
+                member.linkname = "../escaped"
+            elif kind == "fifo":
+                member.name = "fifo"
+                member.type = tarfile.FIFOTYPE
+            tar.addfile(member)
+        dest = tmp_path / "extracted"
+        with pytest.raises(SubmissionBuildError, match="Unsafe archive member"):
+            extract_archive(archive, dest)
+        assert not escaped.exists()
+        assert not (dest / "valid").exists()
+
+    def test_rejects_existing_directory_symlink(self, tmp_path: Path) -> None:
+        dest = tmp_path / "extracted"
+        dest.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (dest / "nested").symlink_to(outside, target_is_directory=True)
+        archive = tmp_path / "unsafe.tar.gz"
+        with tarfile.open(archive, "w:gz") as tar:
+            member = tarfile.TarInfo("nested/escaped")
+            tar.addfile(member)
+        with pytest.raises(SubmissionBuildError, match="Unsafe archive member"):
+            extract_archive(archive, dest)
+        assert not (outside / "escaped").exists()
+
     def test_extracts_files(self, run_archive: Path, tmp_path: Path) -> None:
         dest = tmp_path / "extracted"
         extract_archive(run_archive, dest)
